@@ -7,16 +7,16 @@ import io
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import functools
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain.tools import Tool # CORRIGIDO: Usamos Tool no construtor
-# from langchain.tools import tool # REMOVIDO: Linha desnecessária
+from langchain.tools import Tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.memory import ConversationBufferWindowMemory
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+# Adicionado para evitar o erro "Missing optional dependency 'tabulate'"
+from tabulate import tabulate 
 
 # --- Configuração da Chave de API do Google ---
 try:
@@ -26,9 +26,9 @@ except KeyError:
     st.stop()
 
 # --- Definição das Ferramentas (Tools) ---
-# CORRIGIDO: O decorador @tool foi removido de todas as funções.
 # CORRIGIDO: Adicionado *args para ignorar argumentos extras injetados pela LangChain.
 # CORRIGIDO: O DataFrame (df) é lido diretamente de st.session_state.df dentro da função.
+# CORRIGIDO: As colunas problemáticas ('Time', 'Amount', 'V*') estão agora em minúsculas (padrão 'time', 'amount', 'v*').
 
 def show_descriptive_stats(*args):
     """
@@ -36,8 +36,9 @@ def show_descriptive_stats(*args):
     Retorna um dicionário com o resumo estatístico.
     """
     df = st.session_state.df
-    stats = df.describe(include='all')
-    return {"status": "success", "data": stats.to_markdown(), "message": "Estatísticas descritivas geradas."}
+    # CORRIGIDO: Forçando o uso de tabulate (importado acima) para evitar erro de dependência.
+    stats = df.describe(include='all').to_markdown(tablefmt="pipe")
+    return {"status": "success", "data": stats, "message": "Estatísticas descritivas geradas."}
 
 
 def generate_histogram(column: str, *args):
@@ -46,8 +47,12 @@ def generate_histogram(column: str, *args):
     A entrada deve ser o nome da coluna.
     """
     df = st.session_state.df
+    # CORRIGIDO: Forçando a coluna para minúsculas para corresponder ao DataFrame carregado.
+    column = column.lower()
+    
     if column not in df.columns:
-        return {"status": "error", "message": f"Erro: A coluna '{column}' não existe no DataFrame."}
+        # CORRIGIDO: Mensagem de erro mais clara sobre o problema de minúsculas/maiúsculas.
+        return {"status": "error", "message": f"Houve um erro ao gerar o histograma para a coluna '{column}', pois ela não foi encontrada no DataFrame. O agente converteu a coluna para minúsculas. Por favor, verifique se o nome original está correto."}
     if not pd.api.types.is_numeric_dtype(df[column]):
         return {"status": "error", "message": f"Erro: A coluna '{column}' não é numérica. Por favor, forneça uma coluna numérica para gerar um histograma."}
     
@@ -60,7 +65,7 @@ def generate_histogram(column: str, *args):
     fig.savefig(buf, format="png")
     buf.seek(0)
     plt.close(fig)
-    return {"status": "success", "image": buf, "message": f"Histograma para a coluna '{column}' gerado."}
+    return {"status": "success", "image": buf, "message": f"O histograma da coluna '{column}' foi gerado com sucesso. Ele mostra a distribuição dos valores para essa variável."}
 
 
 def generate_correlation_heatmap(*args):
@@ -81,7 +86,7 @@ def generate_correlation_heatmap(*args):
     fig.savefig(buf, format="png")
     buf.seek(0)
     plt.close(fig)
-    return {"status": "success", "image": buf, "message": "Mapa de calor da correlação gerado."}
+    return {"status": "success", "image": buf, "message": "O mapa de calor da correlação foi gerado com sucesso."}
 
 
 def generate_scatter_plot(x_col: str, y_col: str, *args):
@@ -90,6 +95,10 @@ def generate_scatter_plot(x_col: str, y_col: str, *args):
     As entradas devem ser os nomes das colunas para os eixos X e Y.
     """
     df = st.session_state.df
+    # CORRIGIDO: Forçando as colunas para minúsculas
+    x_col = x_col.lower()
+    y_col = y_col.lower()
+    
     if x_col not in df.columns or y_col not in df.columns:
         return {"status": "error", "message": f"Erro: Uma ou ambas as colunas ('{x_col}', '{y_col}') não existem no DataFrame."}
     
@@ -102,53 +111,78 @@ def generate_scatter_plot(x_col: str, y_col: str, *args):
     fig.savefig(buf, format="png")
     buf.seek(0)
     plt.close(fig)
-    return {"status": "success", "image": buf, "message": f"Gráfico de dispersão para '{x_col}' vs '{y_col}' gerado."}
+    return {"status": "success", "image": buf, "message": f"O gráfico de dispersão para '{x_col}' vs '{y_col}' foi gerado com sucesso."}
 
 
 def detect_outliers_isolation_forest(*args):
     """
     Detecta anomalias (outliers) no DataFrame usando o algoritmo Isolation Forest.
-    A análise é aplicada às colunas V1 a V28, 'Time' e 'Amount' do dataset de fraudes.
+    A análise é aplicada às colunas V1 a V28, 'time' e 'amount' do dataset de fraudes.
     Retorna o número de anomalias detectadas e uma amostra dos outliers.
     """
     try:
         df = st.session_state.df
-        feature_cols = [col for col in df.columns if col.startswith('V')] + ['Time', 'Amount']
-        df_features = df[feature_cols]
+        # CORRIGIDO: Nomes das colunas ajustados para minúsculas ('time', 'amount')
+        feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
+        
+        # Filtra apenas colunas que realmente existem no DF
+        existing_features = [col for col in feature_cols if col in df.columns]
+        if not existing_features:
+             return {"status": "error", "message": "Erro ao detectar anomalias: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
+
+        df_features = df[existing_features]
         scaler = StandardScaler()
         df_scaled = scaler.fit_transform(df_features)
         model = IsolationForest(contamination=0.01, random_state=42)
         df['anomaly_score'] = model.fit_predict(df_scaled)
         outliers = df[df['anomaly_score'] == -1]
+        
         message = f"O algoritmo Isolation Forest detectou {len(outliers)} transações atípicas (outliers)."
         if not outliers.empty:
-            message += "\nAmostra das transações detectadas como anomalias:\n" + outliers.head().to_markdown()
+            message += "\nAmostra das transações detectadas como anomalias:\n" + outliers.head().to_markdown(tablefmt="pipe")
+            
         return {"status": "success", "message": message}
     except Exception as e:
         return {"status": "error", "message": f"Erro ao detectar anomalias: {e}"}
 
 
-def find_clusters_kmeans(n_clusters: int, *args):
+def find_clusters_kmeans(n_clusters: str, *args):
     """
     Realiza agrupamento (clustering) nos dados usando o algoritmo K-Means.
-    A análise é aplicada às colunas V1 a V28, 'Time' e 'Amount' do dataset de fraudes.
-    A entrada deve ser o número de clusters desejado.
+    A análise é aplicada às colunas V1 a V28, 'time' e 'amount' do dataset de fraudes.
+    A entrada deve ser o número de clusters desejado (como string, ex: "5").
     Retorna uma descrição dos clusters encontrados.
     """
     try:
+        # CORRIGIDO: Converte o input (que é uma string por causa do bug de LLM) para int
+        n_clusters = int(n_clusters)
+    except ValueError:
+         return {"status": "error", "message": f"O número de clusters deve ser um número inteiro, mas o valor recebido foi '{n_clusters}'."}
+
+    try:
         df = st.session_state.df
-        feature_cols = [col for col in df.columns if col.startswith('V')] + ['Time', 'Amount']
-        df_features = df[feature_cols]
+        # CORRIGIDO: Nomes das colunas ajustados para minúsculas ('time', 'amount')
+        feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
+        
+        existing_features = [col for col in feature_cols if col in df.columns]
+        if not existing_features:
+             return {"status": "error", "message": "Erro ao encontrar clusters: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
+
+        df_features = df[existing_features]
         scaler = StandardScaler()
         df_scaled = scaler.fit_transform(df_features)
+        
         kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
         df['cluster'] = kmeans.fit_predict(df_scaled)
+        
         cluster_summary = df.groupby('cluster').agg({
-            'Amount': ['mean', 'min', 'max'],
-            'Time': ['min', 'max']
-        })
+            'amount': ['mean', 'min', 'max'],
+            'time': ['min', 'max']
+        }).to_markdown(tablefmt="pipe")
+        
         message = f"O agrupamento K-Means com {n_clusters} clusters foi concluído."
-        message += "\nCaracterísticas dos Clusters:\n" + cluster_summary.to_markdown()
+        message += "\nCaracterísticas dos Clusters:\n" + cluster_summary
+        
         return {"status": "success", "message": message}
     except Exception as e:
         return {"status": "error", "message": f"Erro ao realizar o agrupamento com K-Means: {e}"}
@@ -164,7 +198,6 @@ def load_and_extract_data(uploaded_file):
     try:
         if uploaded_file.name.endswith('.zip'):
             with zipfile.ZipFile(uploaded_file, 'r') as z:
-                # Assume que o CSV é o primeiro arquivo dentro do zip
                 with z.open(z.namelist()[0]) as f:
                     df = pd.read_csv(f)
         elif uploaded_file.name.endswith('.csv'):
@@ -172,8 +205,7 @@ def load_and_extract_data(uploaded_file):
         else:
             return {"status": "error", "message": "Formato de arquivo não suportado. Por favor, envie um arquivo ZIP ou CSV."}
 
-        # O agente lida com a descrição da fraude por meio da análise de features V*
-        # Renomear colunas para minúsculas para padronização
+        # CRÍTICO: Renomear colunas para minúsculas para padronização.
         df.columns = [col.lower() for col in df.columns]
 
         return {"status": "success", "df": df, "message": f"Arquivo '{uploaded_file.name}' carregado com sucesso. DataFrame pronto para análise."}
@@ -198,7 +230,6 @@ def initialize_agent(tools_list, system_prompt_text):
         ]
     )
 
-    # Usa ConversationBufferWindowMemory para memória de curto prazo (últimas 5 interações)
     memory = ConversationBufferWindowMemory(k=5, memory_key="chat_history", return_messages=True)
 
     agent = create_tool_calling_agent(llm, tools_list, prompt)
@@ -206,7 +237,7 @@ def initialize_agent(tools_list, system_prompt_text):
     agent_executor = AgentExecutor(
         agent=agent,
         tools=tools_list,
-        verbose=True, # Mantido como True para ajudar na depuração
+        verbose=True,
         memory=memory,
         max_iterations=15
     )
@@ -242,7 +273,6 @@ with st.sidebar:
             st.session_state.df = load_result["df"]
 
             # 2. Definir a lista final de ferramentas (FIX FINAL)
-            # CORRIGIDO: Removido functools.partial pois as funções lêem o DF da session_state.
             tools_with_df = [
                 Tool(
                     name=show_descriptive_stats.__name__,
@@ -284,6 +314,7 @@ with st.sidebar:
                 "Sempre que o usuário solicitar uma análise de dados, use a ferramenta apropriada. "
                 "Para análises que requerem colunas (como histograma), **você deve** perguntar ao usuário qual coluna ele deseja, se ele não especificar. "
                 "Ao receber o resultado de uma ferramenta (markdown, gráfico ou mensagem), sintetize a informação de forma clara e profissional. "
+                "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. Se o usuário usar maiúsculas, você deve usar minúsculas na chamada da ferramenta. "
                 "Responda às perguntas com base nos resultados das ferramentas e nas conclusões obtidas. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
             )
@@ -303,10 +334,10 @@ with st.sidebar:
 # Exibir histórico de mensagens
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        # CORRIGIDO: Apenas exibe o conteúdo, mas garante que não sejam objetos BytesIO na memória
         if isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
-        else:
+        # A imagem não é mais um objeto BytesIO na memória, é apenas uma string (texto)
+        elif isinstance(message["content"], str):
              st.markdown(message["content"])
 
 # Tratamento de entrada do usuário
@@ -320,18 +351,16 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
     # 2. Executar o agente
     if st.session_state.agent_executor is not None:
         with st.chat_message("assistant"):
-            st_callback = st.container() # Cria um container para o output do agente
+            st_callback = st.container()
             
             try:
-                # O agente executa e a resposta é exibida via st_callback e salva no full_response
                 full_response = st.session_state.agent_executor.invoke({"input": prompt_input})
-                
-                # A resposta do agente pode ser um objeto de string (resposta direta) ou um dicionário (saída da ferramenta)
                 response_content = full_response["output"]
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
                     if "message" in response_content:
+                        # Exibe e salva a mensagem de texto
                         st_callback.markdown(response_content["message"])
                         st.session_state.messages.append({"role": "assistant", "content": response_content["message"]})
                     
@@ -343,10 +372,10 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                         st.session_state.messages.append({"role": "assistant", "content": df_display})
                         
                     if "image" in response_content:
-                        # Exibe a imagem/gráfico
+                        # Exibe a imagem/gráfico no Streamlit
                         st_callback.image(response_content["image"], use_column_width=True)
                         # CORRIGIDO: Não salvar o objeto BytesIO na memória do chat para evitar corrupção
-                        # A descrição já foi salva na linha do "message"
+                        # A descrição da imagem (message) já foi salva.
                     
                     if response_content.get("status") == "error":
                          st_callback.error(response_content["message"])
