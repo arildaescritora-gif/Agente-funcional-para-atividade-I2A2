@@ -15,7 +15,6 @@ from langchain.memory import ConversationBufferWindowMemory
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-# Adicionado para evitar o erro "Missing optional dependency 'tabulate'"
 from tabulate import tabulate 
 
 # --- Configuração da Chave de API do Google ---
@@ -26,9 +25,8 @@ except KeyError:
     st.stop()
 
 # --- Definição das Ferramentas (Tools) ---
-# CORRIGIDO: Adicionado *args para ignorar argumentos extras injetados pela LangChain.
-# CORRIGIDO: O DataFrame (df) é lido diretamente de st.session_state.df dentro da função.
-# CORRIGIDO: As colunas problemáticas ('Time', 'Amount', 'V*') estão agora em minúsculas (padrão 'time', 'amount', 'v*').
+# O DataFrame (df) é lido diretamente de st.session_state.df dentro da função.
+# As colunas problemáticas ('Time', 'Amount', 'V*') estão agora em minúsculas (padrão 'time', 'amount', 'v*').
 
 def show_descriptive_stats(*args):
     """
@@ -36,7 +34,7 @@ def show_descriptive_stats(*args):
     Retorna um dicionário com o resumo estatístico.
     """
     df = st.session_state.df
-    # CORRIGIDO: Forçando o uso de tabulate (importado acima) para evitar erro de dependência.
+    # to_markdown usa tabulate para gerar a tabela em formato Markdown
     stats = df.describe(include='all').to_markdown(tablefmt="pipe")
     return {"status": "success", "data": stats, "message": "Estatísticas descritivas geradas."}
 
@@ -47,11 +45,10 @@ def generate_histogram(column: str, *args):
     A entrada deve ser o nome da coluna.
     """
     df = st.session_state.df
-    # CORRIGIDO: Forçando a coluna para minúsculas para corresponder ao DataFrame carregado.
+    # Forçando a coluna para minúsculas
     column = column.lower()
     
     if column not in df.columns:
-        # CORRIGIDO: Mensagem de erro mais clara sobre o problema de minúsculas/maiúsculas.
         return {"status": "error", "message": f"Houve um erro ao gerar o histograma para a coluna '{column}', pois ela não foi encontrada no DataFrame. O agente converteu a coluna para minúsculas. Por favor, verifique se o nome original está correto."}
     if not pd.api.types.is_numeric_dtype(df[column]):
         return {"status": "error", "message": f"Erro: A coluna '{column}' não é numérica. Por favor, forneça uma coluna numérica para gerar um histograma."}
@@ -95,7 +92,7 @@ def generate_scatter_plot(x_col: str, y_col: str, *args):
     As entradas devem ser os nomes das colunas para os eixos X e Y.
     """
     df = st.session_state.df
-    # CORRIGIDO: Forçando as colunas para minúsculas
+    # Forçando as colunas para minúsculas
     x_col = x_col.lower()
     y_col = y_col.lower()
     
@@ -122,7 +119,7 @@ def detect_outliers_isolation_forest(*args):
     """
     try:
         df = st.session_state.df
-        # CORRIGIDO: Nomes das colunas ajustados para minúsculas ('time', 'amount')
+        # Nomes das colunas ajustados para minúsculas ('time', 'amount')
         feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
         
         # Filtra apenas colunas que realmente existem no DF
@@ -154,14 +151,14 @@ def find_clusters_kmeans(n_clusters: str, *args):
     Retorna uma descrição dos clusters encontrados.
     """
     try:
-        # CORRIGIDO: Converte o input (que é uma string por causa do bug de LLM) para int
+        # Converte o input (que é uma string por causa do bug de LLM) para int
         n_clusters = int(n_clusters)
     except ValueError:
          return {"status": "error", "message": f"O número de clusters deve ser um número inteiro, mas o valor recebido foi '{n_clusters}'."}
 
     try:
         df = st.session_state.df
-        # CORRIGIDO: Nomes das colunas ajustados para minúsculas ('time', 'amount')
+        # Nomes das colunas ajustados para minúsculas ('time', 'amount')
         feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
         
         existing_features = [col for col in feature_cols if col in df.columns]
@@ -272,7 +269,7 @@ with st.sidebar:
         if load_result["status"] == "success":
             st.session_state.df = load_result["df"]
 
-            # 2. Definir a lista final de ferramentas (FIX FINAL)
+            # 2. Definir a lista final de ferramentas
             tools_with_df = [
                 Tool(
                     name=show_descriptive_stats.__name__,
@@ -314,7 +311,7 @@ with st.sidebar:
                 "Sempre que o usuário solicitar uma análise de dados, use a ferramenta apropriada. "
                 "Para análises que requerem colunas (como histograma), **você deve** perguntar ao usuário qual coluna ele deseja, se ele não especificar. "
                 "Ao receber o resultado de uma ferramenta (markdown, gráfico ou mensagem), sintetize a informação de forma clara e profissional. "
-                "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. Se o usuário usar maiúsculas, você deve usar minúsculas na chamada da ferramenta. "
+                "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. "
                 "Responda às perguntas com base nos resultados das ferramentas e nas conclusões obtidas. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
             )
@@ -336,7 +333,6 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         if isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
-        # A imagem não é mais um objeto BytesIO na memória, é apenas uma string (texto)
         elif isinstance(message["content"], str):
              st.markdown(message["content"])
 
@@ -374,8 +370,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     if "image" in response_content:
                         # Exibe a imagem/gráfico no Streamlit
                         st_callback.image(response_content["image"], use_column_width=True)
-                        # CORRIGIDO: Não salvar o objeto BytesIO na memória do chat para evitar corrupção
-                        # A descrição da imagem (message) já foi salva.
+                        # Não salvar o objeto BytesIO na memória do chat. A descrição da imagem (message) já foi salva.
                     
                     if response_content.get("status") == "error":
                          st_callback.error(response_content["message"])
