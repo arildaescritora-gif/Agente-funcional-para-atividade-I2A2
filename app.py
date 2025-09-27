@@ -26,7 +26,6 @@ except KeyError:
 
 # --- Definição das Ferramentas (Tools) ---
 # O DataFrame (df) é lido diretamente de st.session_state.df dentro da função.
-# As colunas problemáticas ('Time', 'Amount', 'V*') estão agora em minúsculas (padrão 'time', 'amount', 'v*').
 
 def show_descriptive_stats(*args):
     """
@@ -34,7 +33,6 @@ def show_descriptive_stats(*args):
     Retorna um dicionário com o resumo estatístico.
     """
     df = st.session_state.df
-    # to_markdown usa tabulate para gerar a tabela em formato Markdown
     stats = df.describe(include='all').to_markdown(tablefmt="pipe")
     return {"status": "success", "data": stats, "message": "Estatísticas descritivas geradas."}
 
@@ -42,16 +40,16 @@ def show_descriptive_stats(*args):
 def generate_histogram(column: str, *args):
     """
     Gera um histograma para uma coluna numérica específica do DataFrame.
-    A entrada deve ser o nome da coluna.
+    A entrada deve ser o nome da coluna (ex: 'amount', 'v5', 'time').
     """
     df = st.session_state.df
     # Forçando a coluna para minúsculas
     column = column.lower()
     
     if column not in df.columns:
-        return {"status": "error", "message": f"Houve um erro ao gerar o histograma para a coluna '{column}', pois ela não foi encontrada no DataFrame. O agente converteu a coluna para minúsculas. Por favor, verifique se o nome original está correto."}
+        return {"status": "error", "message": f"Erro: A coluna '{column}' não foi encontrada no DataFrame. Por favor, verifique se o nome está correto."}
     if not pd.api.types.is_numeric_dtype(df[column]):
-        return {"status": "error", "message": f"Erro: A coluna '{column}' não é numérica. Por favor, forneça uma coluna numérica para gerar um histograma."}
+        return {"status": "error", "message": f"Erro: A coluna '{column}' não é numérica. Forneça uma coluna numérica para gerar um histograma."}
     
     fig, ax = plt.subplots()
     df[column].hist(ax=ax)
@@ -62,7 +60,7 @@ def generate_histogram(column: str, *args):
     fig.savefig(buf, format="png")
     buf.seek(0)
     plt.close(fig)
-    return {"status": "success", "image": buf, "message": f"O histograma da coluna '{column}' foi gerado com sucesso. Ele mostra a distribuição dos valores para essa variável."}
+    return {"status": "success", "image": buf, "message": f"O histograma da coluna '{column}' foi gerado com sucesso."}
 
 
 def generate_correlation_heatmap(*args):
@@ -89,9 +87,15 @@ def generate_correlation_heatmap(*args):
 def generate_scatter_plot(x_col: str, y_col: str, *args):
     """
     Gera um gráfico de dispersão (scatter plot) para visualizar a relação entre duas colunas numéricas.
-    As entradas devem ser os nomes das colunas para os eixos X e Y.
+    As entradas DEVE ser os nomes das colunas X e Y SEPARADAMENTE (ex: x_col='time', y_col='amount').
     """
     df = st.session_state.df
+    
+    # CORRIGIDO: O agente falhou porque a entrada foi ambígua. A validação Pydantic precisa dos dois
+    # argumentos. Vamos garantir que eles existam antes de prosseguir.
+    if not x_col or not y_col:
+         return {"status": "error", "message": "Erro de Argumentos: Para gerar o gráfico de dispersão, o agente precisa de DOIS nomes de coluna distintos para os eixos X e Y."}
+
     # Forçando as colunas para minúsculas
     x_col = x_col.lower()
     y_col = y_col.lower()
@@ -114,7 +118,7 @@ def generate_scatter_plot(x_col: str, y_col: str, *args):
 def detect_outliers_isolation_forest(*args):
     """
     Detecta anomalias (outliers) no DataFrame usando o algoritmo Isolation Forest.
-    A análise é aplicada às colunas V1 a V28, 'time' e 'amount' do dataset de fraudes.
+    A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
     Retorna o número de anomalias detectadas e uma amostra dos outliers.
     """
     try:
@@ -146,8 +150,8 @@ def detect_outliers_isolation_forest(*args):
 def find_clusters_kmeans(n_clusters: str, *args):
     """
     Realiza agrupamento (clustering) nos dados usando o algoritmo K-Means.
-    A análise é aplicada às colunas V1 a V28, 'time' e 'amount' do dataset de fraudes.
-    A entrada deve ser o número de clusters desejado (como string, ex: "5").
+    A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
+    A entrada DEVE ser o número de clusters desejado (como string, ex: "5").
     Retorna uma descrição dos clusters encontrados.
     """
     try:
@@ -312,7 +316,6 @@ with st.sidebar:
                 "Para análises que requerem colunas (como histograma), **você deve** perguntar ao usuário qual coluna ele deseja, se ele não especificar. "
                 "Ao receber o resultado de uma ferramenta (markdown, gráfico ou mensagem), sintetize a informação de forma clara e profissional. "
                 "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. "
-                "Responda às perguntas com base nos resultados das ferramentas e nas conclusões obtidas. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
             )
 
@@ -370,7 +373,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     if "image" in response_content:
                         # Exibe a imagem/gráfico no Streamlit
                         st_callback.image(response_content["image"], use_column_width=True)
-                        # Não salvar o objeto BytesIO na memória do chat. A descrição da imagem (message) já foi salva.
+                        # Não salva o objeto BytesIO na memória do chat.
                     
                     if response_content.get("status") == "error":
                          st_callback.error(response_content["message"])
