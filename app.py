@@ -53,7 +53,7 @@ def generate_histogram(column: str, *args):
     
     # Usando Plotly Express
     fig = px.histogram(df, x=column, title=f'Distribuição de {column}')
-    return {"status": "success", "plotly_figure": fig, "message": f"O histograma da coluna '{column}' foi gerado com sucesso."}
+    return {"status": "success", "plotly_figure": fig, "message": f"O histograma da coluna '{column}' foi gerado com sucesso. Analise a distribuição dos dados e procure por assimetrias ou picos."}
 
 
 def generate_correlation_heatmap(*args):
@@ -77,7 +77,7 @@ def generate_correlation_heatmap(*args):
         color_continuous_scale='RdBu_r'
     )
     fig.update_xaxes(side="top")
-    return {"status": "success", "plotly_figure": fig, "message": "O mapa de calor da correlação interativo foi gerado com sucesso."}
+    return {"status": "success", "plotly_figure": fig, "message": "O mapa de calor da correlação interativo foi gerado. Analise o padrão de cores para identificar relações fortes (vermelho/azul escuro) ou fracas (cinza claro)."}
 
 
 def generate_scatter_plot(columns_str: str, *args):
@@ -103,7 +103,7 @@ def generate_scatter_plot(columns_str: str, *args):
     
     # Usando Plotly Express
     fig = px.scatter(df, x=x_col, y=y_col, title=f'Gráfico de Dispersão: {x_col} vs {y_col}')
-    return {"status": "success", "plotly_figure": fig, "message": f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado com sucesso."}
+    return {"status": "success", "plotly_figure": fig, "message": f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado. Use-o para visualizar a forma e a densidade da relação entre essas variáveis."}
 
 
 def detect_outliers_isolation_forest(*args):
@@ -268,13 +268,14 @@ with st.sidebar:
             ]
 
             system_prompt = (
-                "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente, "
-                "especializado em datasets de transações financeiras. Seu objetivo é ajudar o usuário a "
-                "entender o dataset, usando as ferramentas disponíveis para gerar estatísticas, **e gráficos visuais interativos**. "
-                "IMPORTANTE: Quando uma de suas ferramentas retorna um resultado com a chave 'plotly_figure', "
-                "o gráfico é **automaticamente exibido** na tela do usuário. Você DEVE descrever o que o gráfico mostra, "
-                "e **NUNCA** deve dizer que você não pode exibir a imagem."
-                "Sempre que o usuário solicitar uma análise de dados, use a ferramenta apropriada. "
+                "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente. "
+                "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis, "
+                "especialmente as ferramentas de visualização ('generate_correlation_heatmap', 'generate_scatter_plot', 'generate_histogram'). "
+                "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), "
+                "você **DEVE** selecionar a ferramenta apropriada e executá-la, a menos que os argumentos necessários não sejam fornecidos. "
+                "Não peça confirmação antes de gerar um gráfico se o usuário já o solicitou. "
+                "Quando uma ferramenta retorna 'plotly_figure', o gráfico será exibido; você deve então descrever o que ele mostra. "
+                "Não hesite. Ação acima de tudo."
                 "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
             )
@@ -340,6 +341,6 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
             except Exception as e:
                 # Este bloco captura o erro 500
-                error_message = f"Desculpe, ocorreu um erro grave na análise: {e}. Isso geralmente é causado por um limite de tempo ou memória excedido na nuvem, especialmente com Plotly e grandes datasets. Tente recarregar ou reiniciar a aplicação."
+                error_message = f"Desculpe, ocorreu um erro grave na análise: {e}. Isso geralmente é causado por um limite de tempo ou memória excedido na nuvem. Tente recarregar ou reiniciar a aplicação."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
