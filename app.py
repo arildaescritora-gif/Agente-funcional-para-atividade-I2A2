@@ -7,6 +7,7 @@ import io
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import re # Novo: para análise de string de colunas
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.tools import Tool
@@ -82,24 +83,23 @@ def generate_correlation_heatmap(*args):
     return {"status": "success", "image": buf, "message": "O mapa de calor da correlação foi gerado com sucesso."}
 
 
-def generate_scatter_plot(x_col: str, y_col: str, *args):
+def generate_scatter_plot(columns_str: str, *args):
     """
     Gera um gráfico de dispersão (scatter plot) para visualizar a relação entre duas colunas numéricas.
-    As entradas DEVE ser os nomes das colunas X e Y SEPARADAMENTE (ex: x_col='time', y_col='amount').
+    A entrada DEVE ser uma string contendo os nomes das duas colunas SEPARADAS por um espaço, vírgula ou 'e' (ex: 'time, amount' ou 'v1 e v2').
     """
     df = st.session_state.df
     
-    # Adicionando um argumento extra para capturar o erro "Too many arguments" do LLM
-    if len(args) > 0 and y_col is None:
-        y_col = args[0]
+    # Lógica de parsing robusta para extrair duas colunas da string
+    col_names = re.split(r'[,\s]+', columns_str.lower())
+    col_names = [col for col in col_names if col and col != 'e'] # Filtra strings vazias e 'e'
     
-    if not x_col or not y_col:
-         return {"status": "error", "message": "Erro de Argumentos: Para gerar o gráfico de dispersão, o agente precisa de DOIS nomes de coluna distintos para os eixos X e Y. Por favor, tente novamente especificando as duas colunas de forma clara (ex: 'time' e 'amount')."}
+    if len(col_names) < 2:
+         return {"status": "error", "message": f"Erro de Argumentos: O agente precisa de pelo menos DOIS nomes de coluna para o gráfico de dispersão. Foi encontrado apenas: {col_names}"}
 
-    # Forçando as colunas para minúsculas
-    x_col = x_col.lower()
-    y_col = y_col.lower()
-    
+    x_col = col_names[0]
+    y_col = col_names[1]
+
     if x_col not in df.columns or y_col not in df.columns:
         return {"status": "error", "message": f"Erro: Uma ou ambas as colunas ('{x_col}', '{y_col}') não existem no DataFrame."}
     
@@ -153,7 +153,6 @@ def find_clusters_kmeans(n_clusters: str, *args):
     Retorna uma descrição dos clusters encontrados.
     """
     try:
-        # Converte o input (que é uma string por causa do bug de LLM) para int
         n_clusters = int(n_clusters)
     except ValueError:
          return {"status": "error", "message": f"O número de clusters deve ser um número inteiro, mas o valor recebido foi '{n_clusters}'."}
@@ -203,7 +202,6 @@ def load_and_extract_data(uploaded_file):
         else:
             return {"status": "error", "message": "Formato de arquivo não suportado. Por favor, envie um arquivo ZIP ou CSV."}
 
-        # CRÍTICO: Renomear colunas para minúsculas para padronização.
         df.columns = [col.lower() for col in df.columns]
 
         return {"status": "success", "df": df, "message": f"Arquivo '{uploaded_file.name}' carregado com sucesso. DataFrame pronto para análise."}
@@ -262,7 +260,6 @@ with st.sidebar:
     st.header("Upload do Arquivo de Dados")
     uploaded_file = st.file_uploader("Escolha um arquivo CSV ou ZIP", type=["csv", "zip"])
 
-    # Botão para carregar dados e inicializar o agente
     if st.button("Carregar Dados e Inicializar Agente") and uploaded_file is not None:
         with st.spinner("Carregando e preparando dados..."):
             load_result = load_and_extract_data(uploaded_file)
@@ -279,14 +276,15 @@ with st.sidebar:
                 Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans)
             ]
 
+            # CORREÇÃO CRÍTICA DO PROMPT: Corrigindo a alucinação do agente sobre não mostrar imagens.
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente, "
                 "especializado em datasets de transações financeiras. Seu objetivo é ajudar o usuário a "
-                "entender o dataset, usando as ferramentas disponíveis para gerar estatísticas, gráficos e "
-                "modelos de clustering/anomalias. "
+                "entender o dataset, usando as ferramentas disponíveis para gerar estatísticas, **e gráficos visuais**. "
+                "IMPORTANTE: Quando uma de suas ferramentas retorna um resultado com a chave 'image', "
+                "o gráfico é **automaticamente exibido** na tela do usuário. Você DEVE descrever o que o gráfico mostra, "
+                "e **NUNCA** deve dizer que você não pode exibir a imagem."
                 "Sempre que o usuário solicitar uma análise de dados, use a ferramenta apropriada. "
-                "Para análises que requerem colunas (como histograma ou gráfico de dispersão), **você deve** perguntar ao usuário quais colunas ele deseja, se ele não especificar. "
-                "Ao receber o resultado de uma ferramenta (markdown, gráfico ou mensagem), sintetize a informação de forma clara e profissional. "
                 "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
             )
@@ -306,8 +304,8 @@ with st.sidebar:
 # Exibir histórico de mensagens (COM CORREÇÃO PARA PERSISTÊNCIA VISUAL)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if isinstance(message["content"], io.BytesIO): # SE FOR UM OBJETO DE IMAGEM
-             st.image(message["content"], use_column_width=True) # RENDERIZA COMO IMAGEM
+        if isinstance(message["content"], io.BytesIO): 
+             st.image(message["content"], use_column_width=True)
         elif isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
         elif isinstance(message["content"], str):
@@ -316,12 +314,10 @@ for message in st.session_state.messages:
 # Tratamento de entrada do usuário
 if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'Gere um mapa de calor da correlação')"):
     
-    # 1. Adicionar input do usuário ao chat
     with st.chat_message("user"):
         st.markdown(prompt_input)
     st.session_state.messages.append({"role": "user", "content": prompt_input})
     
-    # 2. Executar o agente
     if st.session_state.agent_executor is not None:
         with st.chat_message("assistant"):
             st_callback = st.container()
@@ -333,28 +329,23 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
                     if "message" in response_content:
-                        # Exibe e salva a mensagem de texto
                         st_callback.markdown(response_content["message"])
                         st.session_state.messages.append({"role": "assistant", "content": response_content["message"]})
                     
                     if "data" in response_content:
-                        # Exibe o DataFrame de estatísticas
                         df_display = pd.read_markdown(response_content["data"])
                         st_callback.dataframe(df_display)
-                        # Salva o DataFrame como objeto DataFrame (para exibição futura)
                         st.session_state.messages.append({"role": "assistant", "content": df_display})
                         
                     if "image" in response_content:
-                        # Exibe a imagem/gráfico no Streamlit
                         st_callback.image(response_content["image"], use_column_width=True)
-                        # CRÍTICO: SALVAR OBJETO BytesIO para re-renderização (PERSISTÊNCIA)
+                        # Salva o objeto BytesIO para persistência do gráfico
                         st.session_state.messages.append({"role": "assistant", "content": response_content["image"]}) 
                     
                     if response_content.get("status") == "error":
                          st_callback.error(response_content["message"])
                     
                 else:
-                    # Resposta direta do LLM (sem uso de ferramenta)
                     st_callback.markdown(str(response_content))
                     st.session_state.messages.append({"role": "assistant", "content": str(response_content)})
 
