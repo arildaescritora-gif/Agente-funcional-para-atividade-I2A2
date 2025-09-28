@@ -202,8 +202,8 @@ def load_and_extract_data(uploaded_file):
 
 
 def initialize_agent(tools_list, system_prompt_text):
-    llm = ChatGoogleGenerativeAI(
-        # ALTERAÇÃO V12: Trocando o modelo LLM para gemma2-9b-it
+    llm = ChatGoogleGenAI(
+        # V13: APENAS o modelo gemma2-9b-it
         model="gemma2-9b-it",
         google_api_key=google_api_key,
         temperature=0.0
@@ -234,9 +234,9 @@ def initialize_agent(tools_list, system_prompt_text):
 
 # --- Interface do Streamlit ---
 
-st.set_page_config(page_title="Agente de Análise de Dados (Gemini/LangChain)", layout="wide")
+st.set_page_config(page_title="Agente de Análise de Dados (Gemma)", layout="wide")
 
-st.title("🤖 Agente de Análise de Dados (EDA) com Gemini/Gemma")
+st.title("🤖 Agente de Análise de Dados (EDA) com Gemma")
 st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises, como correlação, estatísticas descritivas ou detecção de anomalias.")
 
 # Inicializa o estado da sessão
@@ -342,7 +342,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     st.session_state.messages.append({"role": "assistant", "content": str(response_content)})
 
             except Exception as e:
-                # Este bloco captura o erro 500
-                error_message = f"Desculpe, ocorreu um erro grave na análise: {e}. Isso geralmente é causado por um limite de tempo ou memória excedido na nuvem. Tente recarregar ou reiniciar a aplicação."
+                # Alterado para uma mensagem de erro mais genérica, pois o erro max_retries é interno.
+                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Isso pode ser um problema de compatibilidade interna do modelo ou limites de recurso."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
