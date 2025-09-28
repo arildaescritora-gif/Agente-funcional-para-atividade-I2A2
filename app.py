@@ -299,12 +299,11 @@ with st.sidebar:
         st.dataframe(st.session_state.df.head())
 
 
-# Exibir histórico de mensagens
+# Exibir histórico de mensagens (REMOVEMOS A PERSISTÊNCIA DA IMAGEM)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if isinstance(message["content"], io.BytesIO): 
-             st.image(message["content"], use_column_width=True)
-        elif isinstance(message["content"], pd.DataFrame):
+        # A lógica para renderizar io.BytesIO foi removida daqui para evitar falhas de serialização.
+        if isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
         elif isinstance(message["content"], str):
              st.markdown(message["content"])
@@ -326,12 +325,11 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
-                    # CORREÇÃO CRÍTICA V7: Exibir e salvar a IMAGEM primeiro
+                    # CORREÇÃO CRÍTICA V8: Exibe a imagem imediatamente, mas NÃO a salva no histórico.
                     if "image" in response_content:
                         # 1. Exibe a imagem/gráfico no Streamlit
                         st_callback.image(response_content["image"], use_column_width=True)
-                        # 2. Salva o objeto BytesIO (IMAGEM) para persistência
-                        st.session_state.messages.append({"role": "assistant", "content": response_content["image"]}) 
+                        # O PASSO 2 (Salvar a imagem no histórico) FOI REMOVIDO
                     
                     # 3. Exibir e salvar a MENSAGEM de texto
                     if "message" in response_content:
