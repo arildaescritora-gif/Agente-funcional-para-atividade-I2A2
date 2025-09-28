@@ -25,7 +25,6 @@ except KeyError:
     st.stop()
 
 # --- Definição das Ferramentas (Tools) ---
-# O DataFrame (df) é lido diretamente de st.session_state.df dentro da função.
 
 def show_descriptive_stats(*args):
     """
@@ -43,7 +42,6 @@ def generate_histogram(column: str, *args):
     A entrada deve ser o nome da coluna (ex: 'amount', 'v5', 'time').
     """
     df = st.session_state.df
-    # Forçando a coluna para minúsculas
     column = column.lower()
     
     if column not in df.columns:
@@ -91,10 +89,12 @@ def generate_scatter_plot(x_col: str, y_col: str, *args):
     """
     df = st.session_state.df
     
-    # CORRIGIDO: O agente falhou porque a entrada foi ambígua. A validação Pydantic precisa dos dois
-    # argumentos. Vamos garantir que eles existam antes de prosseguir.
+    # Adicionando um argumento extra para capturar o erro "Too many arguments" do LLM
+    if len(args) > 0 and y_col is None:
+        y_col = args[0]
+    
     if not x_col or not y_col:
-         return {"status": "error", "message": "Erro de Argumentos: Para gerar o gráfico de dispersão, o agente precisa de DOIS nomes de coluna distintos para os eixos X e Y."}
+         return {"status": "error", "message": "Erro de Argumentos: Para gerar o gráfico de dispersão, o agente precisa de DOIS nomes de coluna distintos para os eixos X e Y. Por favor, tente novamente especificando as duas colunas de forma clara (ex: 'time' e 'amount')."}
 
     # Forçando as colunas para minúsculas
     x_col = x_col.lower()
@@ -123,10 +123,8 @@ def detect_outliers_isolation_forest(*args):
     """
     try:
         df = st.session_state.df
-        # Nomes das colunas ajustados para minúsculas ('time', 'amount')
         feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
         
-        # Filtra apenas colunas que realmente existem no DF
         existing_features = [col for col in feature_cols if col in df.columns]
         if not existing_features:
              return {"status": "error", "message": "Erro ao detectar anomalias: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
@@ -162,7 +160,6 @@ def find_clusters_kmeans(n_clusters: str, *args):
 
     try:
         df = st.session_state.df
-        # Nomes das colunas ajustados para minúsculas ('time', 'amount')
         feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
         
         existing_features = [col for col in feature_cols if col in df.columns]
@@ -273,38 +270,13 @@ with st.sidebar:
         if load_result["status"] == "success":
             st.session_state.df = load_result["df"]
 
-            # 2. Definir a lista final de ferramentas
             tools_with_df = [
-                Tool(
-                    name=show_descriptive_stats.__name__,
-                    description=show_descriptive_stats.__doc__,
-                    func=show_descriptive_stats 
-                ),
-                Tool(
-                    name=generate_histogram.__name__,
-                    description=generate_histogram.__doc__,
-                    func=generate_histogram
-                ),
-                Tool(
-                    name=generate_correlation_heatmap.__name__,
-                    description=generate_correlation_heatmap.__doc__,
-                    func=generate_correlation_heatmap
-                ),
-                Tool(
-                    name=generate_scatter_plot.__name__,
-                    description=generate_scatter_plot.__doc__,
-                    func=generate_scatter_plot
-                ),
-                Tool(
-                    name=detect_outliers_isolation_forest.__name__,
-                    description=detect_outliers_isolation_forest.__doc__,
-                    func=detect_outliers_isolation_forest
-                ),
-                Tool(
-                    name=find_clusters_kmeans.__name__,
-                    description=find_clusters_kmeans.__doc__,
-                    func=find_clusters_kmeans
-                )
+                Tool(name=show_descriptive_stats.__name__, description=show_descriptive_stats.__doc__, func=show_descriptive_stats),
+                Tool(name=generate_histogram.__name__, description=generate_histogram.__doc__, func=generate_histogram),
+                Tool(name=generate_correlation_heatmap.__name__, description=generate_correlation_heatmap.__doc__, func=generate_correlation_heatmap),
+                Tool(name=generate_scatter_plot.__name__, description=generate_scatter_plot.__doc__, func=generate_scatter_plot),
+                Tool(name=detect_outliers_isolation_forest.__name__, description=detect_outliers_isolation_forest.__doc__, func=detect_outliers_isolation_forest),
+                Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans)
             ]
 
             system_prompt = (
@@ -313,7 +285,7 @@ with st.sidebar:
                 "entender o dataset, usando as ferramentas disponíveis para gerar estatísticas, gráficos e "
                 "modelos de clustering/anomalias. "
                 "Sempre que o usuário solicitar uma análise de dados, use a ferramenta apropriada. "
-                "Para análises que requerem colunas (como histograma), **você deve** perguntar ao usuário qual coluna ele deseja, se ele não especificar. "
+                "Para análises que requerem colunas (como histograma ou gráfico de dispersão), **você deve** perguntar ao usuário quais colunas ele deseja, se ele não especificar. "
                 "Ao receber o resultado de uma ferramenta (markdown, gráfico ou mensagem), sintetize a informação de forma clara e profissional. "
                 "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
@@ -331,10 +303,12 @@ with st.sidebar:
         st.dataframe(st.session_state.df.head())
 
 
-# Exibir histórico de mensagens
+# Exibir histórico de mensagens (COM CORREÇÃO PARA PERSISTÊNCIA VISUAL)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if isinstance(message["content"], pd.DataFrame):
+        if isinstance(message["content"], io.BytesIO): # SE FOR UM OBJETO DE IMAGEM
+             st.image(message["content"], use_column_width=True) # RENDERIZA COMO IMAGEM
+        elif isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
         elif isinstance(message["content"], str):
              st.markdown(message["content"])
@@ -373,7 +347,8 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     if "image" in response_content:
                         # Exibe a imagem/gráfico no Streamlit
                         st_callback.image(response_content["image"], use_column_width=True)
-                        # Não salva o objeto BytesIO na memória do chat.
+                        # CRÍTICO: SALVAR OBJETO BytesIO para re-renderização (PERSISTÊNCIA)
+                        st.session_state.messages.append({"role": "assistant", "content": response_content["image"]}) 
                     
                     if response_content.get("status") == "error":
                          st_callback.error(response_content["message"])
