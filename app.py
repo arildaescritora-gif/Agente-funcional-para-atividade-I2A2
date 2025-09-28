@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import re 
-import plotly.express as px # Plotly Express para gráficos interativos
+import plotly.express as px 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.tools import Tool
@@ -203,7 +203,8 @@ def load_and_extract_data(uploaded_file):
 
 def initialize_agent(tools_list, system_prompt_text):
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        # ALTERAÇÃO V12: Trocando o modelo LLM para gemma2-9b-it
+        model="gemma2-9b-it",
         google_api_key=google_api_key,
         temperature=0.0
     )
@@ -235,7 +236,7 @@ def initialize_agent(tools_list, system_prompt_text):
 
 st.set_page_config(page_title="Agente de Análise de Dados (Gemini/LangChain)", layout="wide")
 
-st.title("🤖 Agente de Análise de Dados (EDA) com Gemini")
+st.title("🤖 Agente de Análise de Dados (EDA) com Gemini/Gemma")
 st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises, como correlação, estatísticas descritivas ou detecção de anomalias.")
 
 # Inicializa o estado da sessão
@@ -267,6 +268,7 @@ with st.sidebar:
                 Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans)
             ]
 
+            # O prompt permanece o agressivo da V11
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente. "
                 "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis, "
