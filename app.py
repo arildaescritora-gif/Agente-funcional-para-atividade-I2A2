@@ -7,7 +7,7 @@ import io
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import re # Novo: para análise de string de colunas
+import re 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.tools import Tool
@@ -90,9 +90,8 @@ def generate_scatter_plot(columns_str: str, *args):
     """
     df = st.session_state.df
     
-    # Lógica de parsing robusta para extrair duas colunas da string
     col_names = re.split(r'[,\s]+', columns_str.lower())
-    col_names = [col for col in col_names if col and col != 'e'] # Filtra strings vazias e 'e'
+    col_names = [col for col in col_names if col and col != 'e'] 
     
     if len(col_names) < 2:
          return {"status": "error", "message": f"Erro de Argumentos: O agente precisa de pelo menos DOIS nomes de coluna para o gráfico de dispersão. Foi encontrado apenas: {col_names}"}
@@ -276,7 +275,6 @@ with st.sidebar:
                 Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans)
             ]
 
-            # CORREÇÃO CRÍTICA DO PROMPT: Corrigindo a alucinação do agente sobre não mostrar imagens.
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente, "
                 "especializado em datasets de transações financeiras. Seu objetivo é ajudar o usuário a "
@@ -301,7 +299,7 @@ with st.sidebar:
         st.dataframe(st.session_state.df.head())
 
 
-# Exibir histórico de mensagens (COM CORREÇÃO PARA PERSISTÊNCIA VISUAL)
+# Exibir histórico de mensagens
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         if isinstance(message["content"], io.BytesIO): 
@@ -328,6 +326,14 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
+                    # CORREÇÃO CRÍTICA V7: Exibir e salvar a IMAGEM primeiro
+                    if "image" in response_content:
+                        # 1. Exibe a imagem/gráfico no Streamlit
+                        st_callback.image(response_content["image"], use_column_width=True)
+                        # 2. Salva o objeto BytesIO (IMAGEM) para persistência
+                        st.session_state.messages.append({"role": "assistant", "content": response_content["image"]}) 
+                    
+                    # 3. Exibir e salvar a MENSAGEM de texto
                     if "message" in response_content:
                         st_callback.markdown(response_content["message"])
                         st.session_state.messages.append({"role": "assistant", "content": response_content["message"]})
@@ -336,11 +342,6 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                         df_display = pd.read_markdown(response_content["data"])
                         st_callback.dataframe(df_display)
                         st.session_state.messages.append({"role": "assistant", "content": df_display})
-                        
-                    if "image" in response_content:
-                        st_callback.image(response_content["image"], use_column_width=True)
-                        # Salva o objeto BytesIO para persistência do gráfico
-                        st.session_state.messages.append({"role": "assistant", "content": response_content["image"]}) 
                     
                     if response_content.get("status") == "error":
                          st_callback.error(response_content["message"])
