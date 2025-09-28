@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import re 
-import plotly.express as px # <--- NOVO: Importação do Plotly Express para gráficos interativos
+import plotly.express as px # Plotly Express para gráficos interativos
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.tools import Tool
@@ -294,7 +294,6 @@ with st.sidebar:
 # Exibir histórico de mensagens (Apenas texto e tabelas são mantidos na memória)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        # A lógica para renderizar io.BytesIO foi removida para evitar falhas de serialização.
         if isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
         elif isinstance(message["content"], str):
@@ -317,10 +316,10 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
-                    # RENDERIZAÇÃO V9: Usa st.plotly_chart para exibir o gráfico Plotly
+                    # RENDERIZAÇÃO V10: Usa st.write() - A função mais tolerante para objetos Plotly
                     if "plotly_figure" in response_content:
-                        # Exibe o gráfico Plotly. Este objeto é mais compatível com o ambiente Streamlit.
-                        st_callback.plotly_chart(response_content["plotly_figure"], use_container_width=True)
+                        # Exibe o gráfico Plotly. st.write é mais robusto contra falhas de renderização.
+                        st_callback.write(response_content["plotly_figure"])
                     
                     # Exibir e salvar a MENSAGEM de texto
                     if "message" in response_content:
@@ -340,6 +339,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     st.session_state.messages.append({"role": "assistant", "content": str(response_content)})
 
             except Exception as e:
-                error_message = f"Desculpe, ocorreu um erro na análise: {e}"
+                # Este bloco captura o erro 500
+                error_message = f"Desculpe, ocorreu um erro grave na análise: {e}. Isso geralmente é causado por um limite de tempo ou memória excedido na nuvem, especialmente com Plotly e grandes datasets. Tente recarregar ou reiniciar a aplicação."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
