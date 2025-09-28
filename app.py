@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import re 
+import plotly.express as px # <--- NOVO: Importação do Plotly Express para gráficos interativos
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.tools import Tool
@@ -39,7 +40,7 @@ def show_descriptive_stats(*args):
 
 def generate_histogram(column: str, *args):
     """
-    Gera um histograma para uma coluna numérica específica do DataFrame.
+    Gera um histograma interativo Plotly para uma coluna numérica específica do DataFrame.
     A entrada deve ser o nome da coluna (ex: 'amount', 'v5', 'time').
     """
     df = st.session_state.df
@@ -50,22 +51,15 @@ def generate_histogram(column: str, *args):
     if not pd.api.types.is_numeric_dtype(df[column]):
         return {"status": "error", "message": f"Erro: A coluna '{column}' não é numérica. Forneça uma coluna numérica para gerar um histograma."}
     
-    fig, ax = plt.subplots()
-    df[column].hist(ax=ax)
-    ax.set_title(f'Distribuição de {column}')
-    ax.set_xlabel(column)
-    ax.set_ylabel('Frequência')
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close(fig)
-    return {"status": "success", "image": buf, "message": f"O histograma da coluna '{column}' foi gerado com sucesso."}
+    # Usando Plotly Express
+    fig = px.histogram(df, x=column, title=f'Distribuição de {column}')
+    return {"status": "success", "plotly_figure": fig, "message": f"O histograma da coluna '{column}' foi gerado com sucesso."}
 
 
 def generate_correlation_heatmap(*args):
     """
     Calcula a matriz de correlação entre as variáveis numéricas do DataFrame
-    e gera um mapa de calor (heatmap) para visualização.
+    e gera um mapa de calor (heatmap) interativo Plotly.
     """
     df = st.session_state.df
     numeric_cols = df.select_dtypes(include=np.number).columns
@@ -73,20 +67,25 @@ def generate_correlation_heatmap(*args):
         return {"status": "error", "message": "Erro: O DataFrame não tem colunas numéricas suficientes para calcular a correlação."}
     
     correlation_matrix = df[numeric_cols].corr()
-    fig, ax = plt.subplots(figsize=(12, 10))
-    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", ax=ax)
-    ax.set_title('Mapa de Calor da Matriz de Correlação')
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close(fig)
-    return {"status": "success", "image": buf, "message": "O mapa de calor da correlação foi gerado com sucesso."}
+    
+    # Usando Plotly Express
+    fig = px.imshow(
+        correlation_matrix,
+        text_auto=".2f",
+        aspect="auto",
+        title='Mapa de Calor da Matriz de Correlação',
+        color_continuous_scale='RdBu_r'
+    )
+    fig.update_xaxes(side="top")
+    return {"status": "success", "plotly_figure": fig, "message": "O mapa de calor da correlação interativo foi gerado com sucesso."}
 
 
 def generate_scatter_plot(columns_str: str, *args):
     """
-    Gera um gráfico de dispersão (scatter plot) para visualizar a relação entre duas colunas numéricas.
-    A entrada DEVE ser uma string contendo os nomes das duas colunas SEPARADAS por um espaço, vírgula ou 'e' (ex: 'time, amount' ou 'v1 e v2').
+    Gera um gráfico de dispersão (scatter plot) interativo Plotly para visualizar 
+    a relação entre duas colunas numéricas.
+    A entrada DEVE ser uma string contendo os nomes das duas colunas SEPARADAS por um espaço, 
+    vírgula ou 'e' (ex: 'time, amount' ou 'v1 e v2').
     """
     df = st.session_state.df
     
@@ -102,16 +101,9 @@ def generate_scatter_plot(columns_str: str, *args):
     if x_col not in df.columns or y_col not in df.columns:
         return {"status": "error", "message": f"Erro: Uma ou ambas as colunas ('{x_col}', '{y_col}') não existem no DataFrame."}
     
-    fig, ax = plt.subplots()
-    df.plot.scatter(x=x_col, y=y_col, ax=ax)
-    ax.set_title(f'Gráfico de Dispersão: {x_col} vs {y_col}')
-    ax.set_xlabel(x_col)
-    ax.set_ylabel(y_col)
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close(fig)
-    return {"status": "success", "image": buf, "message": f"O gráfico de dispersão para '{x_col}' vs '{y_col}' foi gerado com sucesso."}
+    # Usando Plotly Express
+    fig = px.scatter(df, x=x_col, y=y_col, title=f'Gráfico de Dispersão: {x_col} vs {y_col}')
+    return {"status": "success", "plotly_figure": fig, "message": f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado com sucesso."}
 
 
 def detect_outliers_isolation_forest(*args):
@@ -278,8 +270,8 @@ with st.sidebar:
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente, "
                 "especializado em datasets de transações financeiras. Seu objetivo é ajudar o usuário a "
-                "entender o dataset, usando as ferramentas disponíveis para gerar estatísticas, **e gráficos visuais**. "
-                "IMPORTANTE: Quando uma de suas ferramentas retorna um resultado com a chave 'image', "
+                "entender o dataset, usando as ferramentas disponíveis para gerar estatísticas, **e gráficos visuais interativos**. "
+                "IMPORTANTE: Quando uma de suas ferramentas retorna um resultado com a chave 'plotly_figure', "
                 "o gráfico é **automaticamente exibido** na tela do usuário. Você DEVE descrever o que o gráfico mostra, "
                 "e **NUNCA** deve dizer que você não pode exibir a imagem."
                 "Sempre que o usuário solicitar uma análise de dados, use a ferramenta apropriada. "
@@ -299,10 +291,10 @@ with st.sidebar:
         st.dataframe(st.session_state.df.head())
 
 
-# Exibir histórico de mensagens (REMOVEMOS A PERSISTÊNCIA DA IMAGEM)
+# Exibir histórico de mensagens (Apenas texto e tabelas são mantidos na memória)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        # A lógica para renderizar io.BytesIO foi removida daqui para evitar falhas de serialização.
+        # A lógica para renderizar io.BytesIO foi removida para evitar falhas de serialização.
         if isinstance(message["content"], pd.DataFrame):
              st.dataframe(message["content"])
         elif isinstance(message["content"], str):
@@ -325,13 +317,12 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
-                    # CORREÇÃO CRÍTICA V8: Exibe a imagem imediatamente, mas NÃO a salva no histórico.
-                    if "image" in response_content:
-                        # 1. Exibe a imagem/gráfico no Streamlit
-                        st_callback.image(response_content["image"], use_column_width=True)
-                        # O PASSO 2 (Salvar a imagem no histórico) FOI REMOVIDO
+                    # RENDERIZAÇÃO V9: Usa st.plotly_chart para exibir o gráfico Plotly
+                    if "plotly_figure" in response_content:
+                        # Exibe o gráfico Plotly. Este objeto é mais compatível com o ambiente Streamlit.
+                        st_callback.plotly_chart(response_content["plotly_figure"], use_container_width=True)
                     
-                    # 3. Exibir e salvar a MENSAGEM de texto
+                    # Exibir e salvar a MENSAGEM de texto
                     if "message" in response_content:
                         st_callback.markdown(response_content["message"])
                         st.session_state.messages.append({"role": "assistant", "content": response_content["message"]})
