@@ -202,9 +202,9 @@ def load_and_extract_data(uploaded_file):
 
 
 def initialize_agent(tools_list, system_prompt_text):
-    # V16: Retornando ao modelo mais estável para Agent Executor
+    # V17: Usando o modelo gemini-2.5-pro
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", 
+        model="gemini-2.5-pro", 
         google_api_key=google_api_key,
         temperature=0.0
     )
@@ -234,9 +234,9 @@ def initialize_agent(tools_list, system_prompt_text):
 
 # --- Interface do Streamlit ---
 
-st.set_page_config(page_title="Agente de Análise de Dados (Gemini)", layout="wide")
+st.set_page_config(page_title="Agente de Análise de Dados (Gemini Pro)", layout="wide")
 
-st.title("🤖 Agente de Análise de Dados (EDA) com Gemini")
+st.title("🤖 Agente de Análise de Dados (EDA) com Gemini Pro")
 st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises, como correlação, estatísticas descritivas ou detecção de anomalias.")
 
 # Inicializa o estado da sessão
@@ -314,6 +314,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
             st_callback = st.container()
             
             try:
+                # O parâmetro 'input' é a pergunta do usuário.
                 full_response = st.session_state.agent_executor.invoke({"input": prompt_input})
                 response_content = full_response["output"]
 
@@ -343,6 +344,6 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
             except Exception as e:
                 # Mensagem de erro robusta
-                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Isso pode ser devido à complexidade da pergunta ou a um erro de tempo limite."
+                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. O modelo 'Pro' é mais lento e pode ter atingido o limite de tempo do Streamlit Cloud. Por favor, recarregue a página ou simplifique sua última pergunta."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
