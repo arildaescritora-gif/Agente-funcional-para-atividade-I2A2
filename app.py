@@ -133,7 +133,6 @@ def detect_outliers_isolation_forest(*args):
             
         return {"status": "success", "message": message}
     except Exception as e:
-        # Linha 138 (aproximadamente) - Verificação da f-string
         return {"status": "error", "message": f"Erro ao detectar anomalias: {e}"}
 
 
@@ -194,7 +193,7 @@ def load_and_extract_data(uploaded_file):
         else:
             return {"status": "error", "message": "Formato de arquivo não suportado. Por favor, envie um arquivo ZIP ou CSV."}
 
-        # V18/V19: ADICIONANDO AMOSTRAGEM PARA TESTE DE GRÁFICO (10%)
+        # V18/V20: ADICIONANDO AMOSTRAGEM PARA TESTE DE GRÁFICO (10%)
         # Esta linha reduz o DataFrame para 10% do tamanho original.
         df = df.sample(frac=0.1, random_state=42) 
 
@@ -207,7 +206,7 @@ def load_and_extract_data(uploaded_file):
 
 
 def initialize_agent(tools_list, system_prompt_text):
-    # V17/V19: Usando o modelo gemini-2.5-pro
+    # V17/V20: Usando o modelo gemini-2.5-pro
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-pro", 
         google_api_key=google_api_key,
@@ -219,7 +218,8 @@ def initialize_agent(tools_list, system_prompt_text):
             ("system", system_prompt_text),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
-            MessagesPlaceholder(variable            _name="agent_scratchpad"),
+            # V20: Correção do SyntaxError, garantindo que o nome da variável não seja quebrado
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
 
