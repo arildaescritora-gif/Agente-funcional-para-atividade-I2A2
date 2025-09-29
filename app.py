@@ -202,9 +202,9 @@ def load_and_extract_data(uploaded_file):
 
 
 def initialize_agent(tools_list, system_prompt_text):
-    # V15: APENAS o modelo gemma2-9b-it, usando a classe de LLM correta
+    # V16: Retornando ao modelo mais estável para Agent Executor
     llm = ChatGoogleGenerativeAI(
-        model="gemma2-9b-it",
+        model="gemini-2.5-flash", 
         google_api_key=google_api_key,
         temperature=0.0
     )
@@ -234,9 +234,9 @@ def initialize_agent(tools_list, system_prompt_text):
 
 # --- Interface do Streamlit ---
 
-st.set_page_config(page_title="Agente de Análise de Dados (Gemma)", layout="wide")
+st.set_page_config(page_title="Agente de Análise de Dados (Gemini)", layout="wide")
 
-st.title("🤖 Agente de Análise de Dados (EDA) com Gemma")
+st.title("🤖 Agente de Análise de Dados (EDA) com Gemini")
 st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises, como correlação, estatísticas descritivas ou detecção de anomalias.")
 
 # Inicializa o estado da sessão
@@ -268,7 +268,7 @@ with st.sidebar:
                 Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans)
             ]
 
-            # O prompt permanece o agressivo da V11/V14
+            # O prompt permanece o agressivo para garantir a ação
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente. "
                 "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis, "
@@ -319,7 +319,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
-                    # RENDERIZAÇÃO V10: Usa st.write() - A função mais tolerante para objetos Plotly
+                    # RENDERIZAÇÃO: Usa st.write() - A função mais tolerante para objetos Plotly
                     if "plotly_figure" in response_content:
                         # Exibe o gráfico Plotly. st.write é mais robusto contra falhas de renderização.
                         st_callback.write(response_content["plotly_figure"])
@@ -343,6 +343,6 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
             except Exception as e:
                 # Mensagem de erro robusta
-                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Por favor, recarregue a página ou simplifique sua última pergunta."
+                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Isso pode ser devido à complexidade da pergunta ou a um erro de tempo limite."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
