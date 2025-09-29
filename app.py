@@ -39,9 +39,8 @@ def load_and_extract_data(uploaded_file):
         else: # Assumindo CSV
             df = pd.read_csv(uploaded_file)
         
-        # Redução da Amostra: Solução de Sobrevivência para o Streamlit Cloud
-        # Para ser diferente da sua amiga, vamos deixar SEM amostragem no início.
-        # Se os gráficos falharem, ative a amostragem: df = df.sample(frac=0.1, random_state=42)
+        # Se você voltar a ter problemas de desempenho/memória, ative esta linha:
+        # df = df.sample(frac=0.1, random_state=42)
 
         df.columns = [col.lower() for col in df.columns]
 
@@ -149,10 +148,10 @@ def generate_scatter_plot(columns_str: str, *args):
 # --- Inicialização do Agente ---
 
 def initialize_agent(tools_list, system_prompt_text):
-    """Inicializa o Agente de Chamada de Ferramenta (Tool Calling Agent) com Gemini Pro."""
+    """Inicializa o Agente de Chamada de Ferramenta (Tool Calling Agent) com Gemini Flash."""
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro", # Sua escolha de modelo
+        model="gemini-1.5-flash", # V22: Trocado para Flash para resolver Quota Error
         google_api_key=google_api_key,
         temperature=0.0
     )
@@ -182,10 +181,10 @@ def initialize_agent(tools_list, system_prompt_text):
 
 # --- Interface do Streamlit ---
 
-st.set_page_config(page_title="Agente EDA Customizado (Gemini Pro)", layout="wide")
+st.set_page_config(page_title="Agente EDA Customizado (Gemini Flash)", layout="wide")
 
-st.title("🤖 Agente de Análise de Dados Customizado (V21)")
-st.markdown("Agente único usando ferramentas customizadas e o modelo Gemini 2.5 Pro para análise de EDA e geração de gráficos leves (Matplotlib).")
+st.title("🤖 Agente de Análise de Dados Customizado (V22)")
+st.markdown("Agente único usando ferramentas customizadas e o modelo Gemini 1.5 Flash para análise de EDA e geração de gráficos leves (Matplotlib).")
 
 # Inicializa o estado da sessão
 if "messages" not in st.session_state:
