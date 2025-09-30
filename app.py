@@ -373,3 +373,8 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                 error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. O modelo 'Pro' é mais lento e pode ter atingido o limite de tempo. Por favor, recarregue a página ou simplifique sua última pergunta."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
+                
+                # INSERÇÃO DOS COMANDOS SOLICITADOS
+                # Estes comandos não influenciam as ferramentas Plotly, mas estão incluídos conforme pedido.
+                fig = plt.figure(figsize=(10, 6))
+                st.session_state.grafico_para_exibir = fig
