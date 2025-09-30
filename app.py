@@ -4,7 +4,7 @@ import streamlit as st
 import numpy as np
 import zipfile
 import io
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt # Importação Matplotlib
 import seaborn as sns
 import pandas as pd
 import re 
@@ -186,8 +186,8 @@ def find_clusters_kmeans(n_clusters: str, *args):
 
 def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: str = 'scatter', *args):
     """
-    Cria uma figura Matplotlib (fig) de dispersão ou histograma e a RETORNA para ser exibida 
-    imediatamente no chat.
+    Cria uma figura Matplotlib (fig) de dispersão ou histograma e a salva na sessão do Streamlit 
+    para ser exibida no corpo principal. Use esta ferramenta APENAS se os gráficos Plotly (interativos) não forem suficientes.
     
     A entrada DEVE incluir a coluna X (e opcionalmente a coluna Y para dispersão/linha).
     Tipos de gráfico suportados: 'scatter' (dispersão, precisa de X e Y) e 'hist' (histograma, precisa apenas de X).
@@ -199,6 +199,7 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
         return {"status": "error", "message": f"Erro: A coluna '{col_x}' não foi encontrada para o gráfico Matplotlib."}
 
     # SETANDO OS COMANDOS EXATAMENTE COMO SOLICITADO PELO COLEGA
+    # 1. Declarar a variável 'fig' com o plt.figure()
     fig = plt.figure(figsize=(10, 6))
     
     try:
@@ -206,7 +207,6 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
             sns.histplot(df[col_x], kde=True, ax=plt.gca())
             plt.title(f'Histograma Matplotlib de {col_x}')
             plt.xlabel(col_x)
-            plt.tight_layout()
         elif chart_type == 'scatter' and column_y:
             col_y = column_y.lower()
             if col_y not in df.columns:
@@ -215,12 +215,13 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
             plt.title(f'Dispersão Matplotlib: {col_x} vs {col_y}')
             plt.xlabel(col_x)
             plt.ylabel(col_y)
-            plt.tight_layout()
         else:
              return {"status": "error", "message": "Tipo de gráfico Matplotlib inválido ('scatter' exige 2 colunas, 'hist' exige 1), ou colunas não fornecidas."}
         
-        # RETORNA A FIGURA DIRETAMENTE para ser exibida no bloco de chat.
-        return {"status": "success", "matplotlib_figure": fig, "message": f"O gráfico Matplotlib do tipo '{chart_type}' foi gerado. Analise a visualização para insights."}
+        # 2. Setar a figura na sessão do Streamlit
+        st.session_state.grafico_para_exibir = fig 
+        
+        return {"status": "success", "message": f"O gráfico Matplotlib do tipo '{chart_type}' para as colunas foi gerado e está pronto para exibição no Streamlit."}
 
     except Exception as e:
         plt.close(fig) # Fechar a figura em caso de erro
@@ -258,11 +259,11 @@ def load_and_extract_data(uploaded_file):
 
 
 def initialize_agent(tools_list, system_prompt_text):
-    """Inicializa e configura o LangChain Agent com o modelo Gemini Flash (mais cota)."""
+    """Inicializa e configura o LangChain Agent com o modelo Gemini Pro."""
     
-    # Modelo alterado para Gemini 2.5 Flash, que é mais rápido e tem cota gratuita maior.
+    # Modelo alterado para Gemini 2.5 Flash, que é mais rápido e tem cota gratuita maior que o Pro.
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", 
+        model="gemini-2.5-flash", # MUDANÇA: Usando Flash para evitar o erro 429 de cota (mais rápido e maior limite)
         google_api_key=google_api_key,
         temperature=0.0
     )
@@ -298,7 +299,7 @@ def initialize_agent(tools_list, system_prompt_text):
 st.set_page_config(page_title="Agente de Análise de Dados (Gemini Flash)", layout="wide")
 
 st.title("🤖 Agente de Análise de Dados (EDA) com Gemini Flash")
-st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises. O modelo foi alterado para Gemini Flash para evitar erros de limite de cota.")
+st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises, como correlação, estatísticas descritivas ou detecção de anomalias.")
 
 # Inicializa o estado da sessão
 if "messages" not in st.session_state:
@@ -307,6 +308,9 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "agent_executor" not in st.session_state:
     st.session_state.agent_executor = None
+# Inicializa a variável de estado para o Matplotlib (para evitar o erro "KeyError")
+if "grafico_para_exibir" not in st.session_state:
+     st.session_state.grafico_para_exibir = None
 
 # Sidebar para upload de arquivo
 with st.sidebar:
@@ -319,10 +323,6 @@ with st.sidebar:
 
         if load_result["status"] == "success":
             st.session_state.df = load_result["df"]
-            
-            # Limpa o estado da sessão para garantir que o gráfico Matplotlib antigo seja removido
-            if "grafico_para_exibir" in st.session_state:
-                 del st.session_state["grafico_para_exibir"]
 
             # Cria a lista de ferramentas LangChain.
             tools_with_df = [
@@ -332,7 +332,7 @@ with st.sidebar:
                 Tool(name=generate_scatter_plot.__name__, description=generate_scatter_plot.__doc__, func=generate_scatter_plot),
                 Tool(name=detect_outliers_isolation_forest.__name__, description=detect_outliers_isolation_forest.__doc__, func=detect_outliers_isolation_forest),
                 Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans),
-                Tool(name=generate_matplotlib_figure.__name__, description=generate_matplotlib_figure.__doc__, func=generate_matplotlib_figure),
+                Tool(name=generate_matplotlib_figure.__name__, description=generate_matplotlib_figure.__doc__, func=generate_matplotlib_figure), # Nova ferramenta Matplotlib
             ]
 
             system_prompt = (
@@ -340,7 +340,7 @@ with st.sidebar:
                 "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis. "
                 "Use as ferramentas Plotly (histogram, heatmap, scatter) para gráficos interativos. Use a ferramenta 'generate_matplotlib_figure' apenas se o usuário pedir um gráfico Matplotlib específico. "
                 "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), você **DEVE** selecionar a ferramenta apropriada e executá-la. "
-                "Quando uma ferramenta retorna 'plotly_figure' ou 'matplotlib_figure', o gráfico será exibido imediatamente no chat. "
+                "Quando uma ferramenta retorna 'plotly_figure', o gráfico será exibido. Quando a ferramenta 'generate_matplotlib_figure' é usada, o gráfico Matplotlib é salvo na sessão. "
                 "Sua resposta final deve sempre ser em Português e oferecer insights."
             )
 
@@ -358,6 +358,15 @@ with st.sidebar:
 
 # --- EXIBIÇÃO DE MENSAGENS E GRÁFICOS ---
 
+# Lógica do colega: Checar e exibir o gráfico Matplotlib da sessão
+if st.session_state.grafico_para_exibir is not None:
+    st.subheader("Gráfico Matplotlib")
+    # Usa st.pyplot para renderizar o objeto Matplotlib salvo na sessão
+    st.pyplot(st.session_state.grafico_para_exibir)
+    # Limpa a sessão após exibir para que o gráfico não persista em outros runs
+    st.session_state.grafico_para_exibir = None 
+    plt.close('all') # Libera a memória do Matplotlib
+
 # Exibir histórico de mensagens 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -367,7 +376,7 @@ for message in st.session_state.messages:
              st.markdown(message["content"])
 
 # Tratamento de entrada do usuário
-if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'Gere um mapa de calor da correlação' ou 'Gere um histograma Matplotlib da coluna amount')"):
+if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'Gere um mapa de calor da correlação')"):
     
     with st.chat_message("user"):
         st.markdown(prompt_input)
@@ -383,14 +392,9 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
 
                 if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
                     
-                    # RENDERIZAÇÃO DE GRÁFICO PLOTLY (AGORA USANDO st.plotly_chart para maior robustez)
+                    # RENDERIZAÇÃO DE GRÁFICO PLOTLY
                     if "plotly_figure" in response_content:
-                        st_callback.plotly_chart(response_content["plotly_figure"], use_container_width=True)
-                        
-                    # RENDERIZAÇÃO DE GRÁFICO MATPLOTLIB 
-                    if "matplotlib_figure" in response_content:
-                        st_callback.pyplot(response_content["matplotlib_figure"])
-                        plt.close(response_content["matplotlib_figure"]) 
+                        st_callback.write(response_content["plotly_figure"])
                     
                     # Exibir e salvar a MENSAGEM de texto
                     if "message" in response_content:
@@ -412,6 +416,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     st.session_state.messages.append({"role": "assistant", "content": str(response_content)})
 
             except Exception as e:
+                # O erro 429 (Quota Exceeded) não é mais comum com o Gemini Flash, mas mantemos o tratamento.
                 error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Por favor, recarregue a página ou simplifique sua última pergunta."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
