@@ -126,4 +126,255 @@ def detect_outliers_isolation_forest(*args):
         
         existing_features = [col for col in feature_cols if col in df.columns]
         if not existing_features:
-              return {"status": "error", "message": "Erro ao detectar anomalias: Não foram encontradas colunas
+              # CORREÇÃO AQUI: Certificando-se que a string de retorno está fechada corretamente.
+              return {"status": "error", "message": "Erro ao detectar anomalias: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
+
+        df_features = df[existing_features]
+        scaler = StandardScaler()
+        df_scaled = scaler.fit_transform(df_features)
+        model = IsolationForest(contamination=0.01, random_state=42)
+        df['anomaly_score'] = model.fit_predict(df_scaled)
+        outliers = df[df['anomaly_score'] == -1]
+        
+        message = f"O algoritmo Isolation Forest detectou {len(outliers)} transações atípicas (outliers)."
+        if not outliers.empty:
+            message += "\nAmostra das transações detectadas como anomalias:\n" + outliers.head().to_markdown(tablefmt="pipe")
+            
+        return {"status": "success", "message": message}
+    except Exception as e:
+        return {"status": "error", "message": f"Erro ao detectar anomalias: {e}"}
+
+
+def find_clusters_kmeans(n_clusters: str, *args):
+    """
+    Realiza agrupamento (clustering) nos dados usando o algoritmo K-Means.
+    A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
+    A entrada DEVE ser o número de clusters desejado (como string, ex: "5").
+    Retorna uma descrição dos clusters encontrados.
+    """
+    try:
+        n_clusters = int(n_clusters)
+    except ValueError:
+          return {"status": "error", "message": f"O número de clusters deve ser um número inteiro, mas o valor recebido foi '{n_clusters}'."}
+
+    try:
+        df = st.session_state.df
+        feature_cols = [col for col in df.columns if col.startswith('v')] + ['time', 'amount']
+        
+        existing_features = [col for col in feature_cols if col in df.columns]
+        if not existing_features:
+              return {"status": "error", "message": "Erro ao encontrar clusters: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
+
+        df_features = df[existing_features]
+        scaler = StandardScaler()
+        df_scaled = scaler.fit_transform(df_features)
+        
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+        df['cluster'] = kmeans.fit_predict(df_scaled)
+        
+        cluster_summary = df.groupby('cluster').agg({
+            'amount': ['mean', 'min', 'max'],
+            'time': ['min', 'max']
+        }).to_markdown(tablefmt="pipe")
+        
+        message = f"O agrupamento K-Means com {n_clusters} clusters foi concluído."
+        message += "\nCaracterísticas dos Clusters:\n" + cluster_summary
+        
+        return {"status": "success", "message": message}
+    except Exception as e:
+        return {"status": "error", "message": f"Erro ao realizar o agrupamento com K-Means: {e}"}
+
+
+# --------------------------------------------------------------------------------------
+# --- FUNÇÕES DE CARREGAMENTO DE DADOS E AGENTE ---
+# --------------------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def load_and_extract_data(uploaded_file):
+    """Carrega e prepara o DataFrame a partir de um arquivo CSV ou ZIP."""
+    if uploaded_file is None:
+        return {"status": "error", "message": "Nenhum arquivo enviado."}
+
+    try:
+        if uploaded_file.name.endswith('.zip'):
+            with zipfile.ZipFile(uploaded_file, 'r') as z:
+                # Assume que o CSV é o primeiro arquivo dentro do ZIP
+                with z.open(z.namelist()[0]) as f:
+                    df = pd.read_csv(f)
+        elif uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            return {"status": "error", "message": "Formato de arquivo não suportado. Por favor, envie um arquivo ZIP ou CSV."}
+
+        # Padroniza nomes de colunas para minúsculas
+        df.columns = [col.lower() for col in df.columns]
+
+        return {"status": "success", "df": df, "message": f"Arquivo '{uploaded_file.name}' carregado com sucesso. DataFrame pronto para análise."}
+
+    except Exception as e:
+        return {"status": "error", "message": f"Erro ao processar o arquivo: {e}"}
+
+
+def initialize_agent(tools_list, system_prompt_text):
+    """Inicializa e configura o LangChain Agent com o modelo Gemini Pro."""
+    
+    # V17: Usando o modelo gemini-2.5-pro
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-pro", 
+        google_api_key=google_api_key,
+        temperature=0.0
+    )
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt_text),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
+
+    memory = ConversationBufferWindowMemory(k=5, memory_key="chat_history", return_messages=True)
+
+    agent = create_tool_calling_agent(llm, tools_list, prompt)
+
+    # Cria o executor do agente
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools_list,
+        verbose=True,
+        memory=memory,
+        max_iterations=15
+    )
+    return agent_executor
+
+
+# --------------------------------------------------------------------------------------
+# --- INTERFACE DO STREAMLIT ---
+# --------------------------------------------------------------------------------------
+
+st.set_page_config(page_title="Agente de Análise de Dados (Gemini Pro)", layout="wide")
+
+st.title("🤖 Agente de Análise de Dados (EDA) com Gemini Pro")
+st.markdown("Envie um arquivo CSV (ou ZIP com CSV) e pergunte ao agente para realizar análises, como correlação, estatísticas descritivas ou detecção de anomalias.")
+
+# Inicializa o estado da sessão
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "df" not in st.session_state:
+    st.session_state.df = None
+if "agent_executor" not in st.session_state:
+    st.session_state.agent_executor = None
+
+# Sidebar para upload de arquivo
+with st.sidebar:
+    st.header("Upload do Arquivo de Dados")
+    uploaded_file = st.file_uploader("Escolha um arquivo CSV ou ZIP", type=["csv", "zip"])
+
+    if st.button("Carregar Dados e Inicializar Agente") and uploaded_file is not None:
+        with st.spinner("Carregando e preparando dados..."):
+            load_result = load_and_extract_data(uploaded_file)
+
+        if load_result["status"] == "success":
+            st.session_state.df = load_result["df"]
+
+            # Cria a lista de ferramentas LangChain. É importante usar __name__ e __doc__ aqui.
+            tools_with_df = [
+                Tool(name=show_descriptive_stats.__name__, description=show_descriptive_stats.__doc__, func=show_descriptive_stats),
+                Tool(name=generate_histogram.__name__, description=generate_histogram.__doc__, func=generate_histogram),
+                Tool(name=generate_correlation_heatmap.__name__, description=generate_correlation_heatmap.__doc__, func=generate_correlation_heatmap),
+                Tool(name=generate_scatter_plot.__name__, description=generate_scatter_plot.__doc__, func=generate_scatter_plot),
+                Tool(name=detect_outliers_isolation_forest.__name__, description=detect_outliers_isolation_forest.__doc__, func=detect_outliers_isolation_forest),
+                Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans)
+            ]
+
+            # O prompt permanece o agressivo para garantir a ação
+            system_prompt = (
+                "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente. "
+                "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis, "
+                "especialmente as ferramentas de visualização ('generate_correlation_heatmap', 'generate_scatter_plot', 'generate_histogram'). "
+                "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), "
+                "você **DEVE** selecionar a ferramenta apropriada e executá-la, a menos que os argumentos necessários não sejam fornecidos. "
+                "Não peça confirmação antes de gerar um gráfico se o usuário já o solicitou. "
+                "Quando uma ferramenta retorna 'plotly_figure', o gráfico será exibido; você deve então descrever o que ele mostra. "
+                "Não hesite. Ação acima de tudo."
+                "Lembre-se: todas as colunas V* e 'Time' e 'Amount' foram convertidas para minúsculas ('v*', 'time', 'amount') no DataFrame. "
+                "Sua resposta final deve sempre ser em Português e oferecer insights."
+            )
+
+            st.session_state.agent_executor = initialize_agent(tools_with_df, system_prompt)
+            st.success("Dados carregados e agente inicializado! Você pode começar a perguntar.")
+
+        else:
+            st.error(load_result["message"])
+
+    if st.session_state.df is not None:
+        st.success(f"DataFrame carregado com {len(st.session_state.df)} linhas e {len(st.session_state.df.columns)} colunas.")
+        st.subheader("Visualização dos Dados (Amostra)")
+        st.dataframe(st.session_state.df.head())
+
+
+# --- EXIBIÇÃO DE MENSAGENS E GRÁFICOS ---
+
+# Exibir histórico de mensagens (Apenas texto e tabelas são mantidos na memória)
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        if isinstance(message["content"], pd.DataFrame):
+             st.dataframe(message["content"])
+        elif isinstance(message["content"], str):
+             st.markdown(message["content"])
+
+# Tratamento de entrada do usuário
+if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'Gere um mapa de calor da correlação')"):
+    
+    with st.chat_message("user"):
+        st.markdown(prompt_input)
+    st.session_state.messages.append({"role": "user", "content": prompt_input})
+    
+    if st.session_state.agent_executor is not None:
+        with st.chat_message("assistant"):
+            # Cria um container para exibir a resposta (texto/gráfico)
+            st_callback = st.container()
+            
+            try:
+                # O parâmetro 'input' é a pergunta do usuário.
+                full_response = st.session_state.agent_executor.invoke({"input": prompt_input})
+                response_content = full_response["output"]
+
+                # Lógica de tratamento da resposta (Output Parser não é necessário aqui, pois a função retorna o dicionário diretamente)
+                if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
+                    
+                    # RENDERIZAÇÃO DE GRÁFICO PLOTLY
+                    if "plotly_figure" in response_content:
+                        # Exibe o gráfico Plotly. st.write é robusto para Plotly.
+                        st_callback.write(response_content["plotly_figure"])
+                    
+                    # Exibir e salvar a MENSAGEM de texto
+                    if "message" in response_content:
+                        st_callback.markdown(response_content["message"])
+                        st.session_state.messages.append({"role": "assistant", "content": response_content["message"]})
+                    
+                    # Exibir e salvar DADOS (Tabelas Markdown de describe ou cluster_summary)
+                    if "data" in response_content:
+                        # Converte Markdown para DataFrame para exibição (apenas para a UI)
+                        df_display = pd.read_markdown(response_content["data"])
+                        st_callback.dataframe(df_display)
+                        st.session_state.messages.append({"role": "assistant", "content": df_display}) # Salva o DF para histórico
+                    
+                    if response_content.get("status") == "error":
+                          st_callback.error(response_content["message"])
+                    
+                else:
+                    # Resposta de texto direto do LLM (quando não usa ferramenta)
+                    st_callback.markdown(str(response_content))
+                    st.session_state.messages.append({"role": "assistant", "content": str(response_content)})
+
+            except Exception as e:
+                # Mensagem de erro robusta em caso de falha de execução
+                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. O modelo 'Pro' é mais lento e pode ter atingido o limite de tempo do Streamlit Cloud. Por favor, recarregue a página ou simplifique sua última pergunta."
+                st_callback.error(error_message)
+                st.session_state.messages.append({"role": "assistant", "content": error_message})
+                
+                # INCLUSÃO DOS COMANDOS SOLICITADOS (para Matplotlib)
+                fig = plt.figure(figsize=(10, 6))
+                st.session_state.grafico_para_exibir = fig
