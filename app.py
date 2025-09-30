@@ -36,7 +36,8 @@ except KeyError:
 # --- FERRAMENTAS (TOOLS) PARA O AGENTE ---
 # --------------------------------------------------------------------------------------
 
-def show_descriptive_stats(*args) -> str:
+# AJUSTE: Removido *args
+def show_descriptive_stats() -> str:
     """
     Gera estatísticas descritivas para todas as colunas de um DataFrame.
     Retorna uma string contendo a tabela em formato Markdown.
@@ -51,7 +52,7 @@ def show_descriptive_stats(*args) -> str:
 def generate_histogram(column: str, *args) -> str:
     """
     Gera um histograma interativo Plotly para uma coluna numérica específica do DataFrame.
-    A entrada deve ser o nome da coluna (ex: 'amount', 'v5', 'time').
+    A entrada DEVE ser o nome da coluna (ex: 'amount', 'v5', 'time').
     """
     df = st.session_state.df
     column = column.lower()
@@ -71,7 +72,8 @@ def generate_histogram(column: str, *args) -> str:
     return f"O histograma da coluna '{column}' foi gerado com sucesso. O gráfico interativo está abaixo. Analise a distribuição dos dados e procure por assimetrias ou picos."
 
 
-def generate_correlation_heatmap(*args) -> str:
+# AJUSTE: Removido *args
+def generate_correlation_heatmap() -> str:
     """
     Calcula a matriz de correlação entre as variáveis numéricas do DataFrame
     e gera um mapa de calor (heatmap) interativo Plotly.
@@ -131,7 +133,8 @@ def generate_scatter_plot(columns_str: str, *args) -> str:
     return f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado. O gráfico está abaixo. Use-o para visualizar a forma e a densidade da relação entre essas variáveis."
 
 
-def detect_outliers_isolation_forest(*args) -> str:
+# AJUSTE: Removido *args
+def detect_outliers_isolation_forest() -> str:
     """
     Detecta anomalias (outliers) no DataFrame usando o algoritmo Isolation Forest.
     A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
@@ -326,7 +329,7 @@ if "agent_executor" not in st.session_state:
 # Inicializa a variável de estado para o Matplotlib
 if "grafico_para_exibir" not in st.session_state:
      st.session_state.grafico_para_exibir = None
-# NOVO: Inicializa a variável de estado para o Plotly
+# Inicializa a variável de estado para o Plotly
 if "plotly_figure_para_exibir" not in st.session_state:
      st.session_state.plotly_figure_para_exibir = None
 
