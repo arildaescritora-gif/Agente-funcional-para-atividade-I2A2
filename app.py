@@ -4,7 +4,7 @@ import streamlit as st
 import numpy as np
 import zipfile
 import io
-import matplotlib.pyplot as plt # Importação Matplotlib
+import matplotlib.pyplot as plt 
 import seaborn as sns
 import pandas as pd
 import re 
@@ -36,17 +36,19 @@ except KeyError:
 # --- FERRAMENTAS (TOOLS) PARA O AGENTE ---
 # --------------------------------------------------------------------------------------
 
-def show_descriptive_stats(*args):
+def show_descriptive_stats(*args) -> str:
     """
     Gera estatísticas descritivas para todas as colunas de um DataFrame.
-    Retorna um dicionário com o resumo estatístico.
+    Retorna uma string contendo a tabela em formato Markdown.
     """
     df = st.session_state.df
     stats = df.describe(include='all').to_markdown(tablefmt="pipe")
-    return {"status": "success", "data": stats, "message": "Estatísticas descritivas geradas."}
+    
+    # Retorna uma única string para o LLM, que ele irá formatar
+    return "Estatísticas descritivas geradas. Analise a distribuição dos dados e procure por valores extremos:\n\n" + stats
 
 
-def generate_histogram(column: str, *args):
+def generate_histogram(column: str, *args) -> str:
     """
     Gera um histograma interativo Plotly para uma coluna numérica específica do DataFrame.
     A entrada deve ser o nome da coluna (ex: 'amount', 'v5', 'time').
@@ -55,16 +57,21 @@ def generate_histogram(column: str, *args):
     column = column.lower()
     
     if column not in df.columns:
-        return {"status": "error", "message": f"Erro: A coluna '{column}' não foi encontrada no DataFrame. Por favor, verifique se o nome está correto."}
+        return f"Erro: A coluna '{column}' não foi encontrada no DataFrame. Por favor, verifique se o nome está correto."
     if not pd.api.types.is_numeric_dtype(df[column]):
-        return {"status": "error", "message": f"Erro: A coluna '{column}' não é numérica. Forneça uma coluna numérica para gerar um histograma."}
+        return f"Erro: A coluna '{column}' não é numérica. Forneça uma coluna numérica para gerar um histograma."
     
     # Usando Plotly Express
     fig = px.histogram(df, x=column, title=f'Distribuição de {column}')
-    return {"status": "success", "plotly_figure": fig, "message": f"O histograma da coluna '{column}' foi gerado com sucesso. Analise a distribuição dos dados e procure por assimetrias ou picos."}
+    
+    # Salva o objeto Plotly na sessão do Streamlit para renderização
+    st.session_state.plotly_figure_para_exibir = fig
+    
+    # Retorna APENAS a string de sucesso para o LLM
+    return f"O histograma da coluna '{column}' foi gerado com sucesso. O gráfico interativo está abaixo. Analise a distribuição dos dados e procure por assimetrias ou picos."
 
 
-def generate_correlation_heatmap(*args):
+def generate_correlation_heatmap(*args) -> str:
     """
     Calcula a matriz de correlação entre as variáveis numéricas do DataFrame
     e gera um mapa de calor (heatmap) interativo Plotly.
@@ -72,7 +79,7 @@ def generate_correlation_heatmap(*args):
     df = st.session_state.df
     numeric_cols = df.select_dtypes(include=np.number).columns
     if len(numeric_cols) < 2:
-        return {"status": "error", "message": "Erro: O DataFrame não tem colunas numéricas suficientes para calcular a correlação."}
+        return "Erro: O DataFrame não tem colunas numéricas suficientes para calcular a correlação."
     
     correlation_matrix = df[numeric_cols].corr()
     
@@ -85,10 +92,15 @@ def generate_correlation_heatmap(*args):
         color_continuous_scale='RdBu_r'
     )
     fig.update_xaxes(side="top")
-    return {"status": "success", "plotly_figure": fig, "message": "O mapa de calor da correlação interativo foi gerado. Analise o padrão de cores para identificar relações fortes (vermelho/azul escuro) ou fracas (cinza claro)."}
+    
+    # Salva o objeto Plotly na sessão do Streamlit para renderização
+    st.session_state.plotly_figure_para_exibir = fig
+    
+    # Retorna APENAS a string de sucesso para o LLM
+    return "O mapa de calor da correlação interativo foi gerado. O gráfico está abaixo. Analise o padrão de cores para identificar relações fortes (vermelho/azul escuro) ou fracas (cinza claro)."
 
 
-def generate_scatter_plot(columns_str: str, *args):
+def generate_scatter_plot(columns_str: str, *args) -> str:
     """
     Gera um gráfico de dispersão (scatter plot) interativo Plotly para visualizar 
     a relação entre duas colunas numéricas.
@@ -101,24 +113,29 @@ def generate_scatter_plot(columns_str: str, *args):
     col_names = [col for col in col_names if col and col != 'e'] 
     
     if len(col_names) < 2:
-          return {"status": "error", "message": f"Erro de Argumentos: O agente precisa de pelo menos DOIS nomes de coluna para o gráfico de dispersão. Foi encontrado apenas: {col_names}"}
+          return f"Erro de Argumentos: O agente precisa de pelo menos DOIS nomes de coluna para o gráfico de dispersão. Foi encontrado apenas: {col_names}"
 
     x_col = col_names[0]
     y_col = col_names[1]
 
     if x_col not in df.columns or y_col not in df.columns:
-        return {"status": "error", "message": f"Erro: Uma ou ambas as colunas ('{x_col}', '{y_col}') não existem no DataFrame."}
+        return f"Erro: Uma ou ambas as colunas ('{x_col}', '{y_col}') não existem no DataFrame."
     
     # Usando Plotly Express
     fig = px.scatter(df, x=x_col, y=y_col, title=f'Gráfico de Dispersão: {x_col} vs {y_col}')
-    return {"status": "success", "plotly_figure": fig, "message": f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado. Use-o para visualizar a forma e a densidade da relação entre essas variáveis."}
+    
+    # Salva o objeto Plotly na sessão do Streamlit para renderização
+    st.session_state.plotly_figure_para_exibir = fig
+    
+    # Retorna APENAS a string de sucesso para o LLM
+    return f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado. O gráfico está abaixo. Use-o para visualizar a forma e a densidade da relação entre essas variáveis."
 
 
-def detect_outliers_isolation_forest(*args):
+def detect_outliers_isolation_forest(*args) -> str:
     """
     Detecta anomalias (outliers) no DataFrame usando o algoritmo Isolation Forest.
     A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
-    Retorna o número de anomalias detectadas e uma amostra dos outliers.
+    Retorna o número de anomalias detectadas e uma amostra dos outliers em formato de string.
     """
     try:
         df = st.session_state.df
@@ -126,7 +143,7 @@ def detect_outliers_isolation_forest(*args):
         
         existing_features = [col for col in feature_cols if col in df.columns]
         if not existing_features:
-              return {"status": "error", "message": "Erro ao detectar anomalias: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
+              return "Erro ao detectar anomalias: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."
 
         df_features = df[existing_features]
         scaler = StandardScaler()
@@ -139,22 +156,22 @@ def detect_outliers_isolation_forest(*args):
         if not outliers.empty:
             message += "\nAmostra das transações detectadas como anomalias:\n" + outliers.head().to_markdown(tablefmt="pipe")
             
-        return {"status": "success", "message": message}
+        return message
     except Exception as e:
-        return {"status": "error", "message": f"Erro ao detectar anomalias: {e}"}
+        return f"Erro ao detectar anomalias: {e}"
 
 
-def find_clusters_kmeans(n_clusters: str, *args):
+def find_clusters_kmeans(n_clusters: str, *args) -> str:
     """
     Realiza agrupamento (clustering) nos dados usando o algoritmo K-Means.
     A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
     A entrada DEVE ser o número de clusters desejado (como string, ex: "5").
-    Retorna uma descrição dos clusters encontrados.
+    Retorna uma descrição dos clusters encontrados em formato de string.
     """
     try:
         n_clusters = int(n_clusters)
     except ValueError:
-          return {"status": "error", "message": f"O número de clusters deve ser um número inteiro, mas o valor recebido foi '{n_clusters}'."}
+          return f"O número de clusters deve ser um número inteiro, mas o valor recebido foi '{n_clusters}'."
 
     try:
         df = st.session_state.df
@@ -162,7 +179,7 @@ def find_clusters_kmeans(n_clusters: str, *args):
         
         existing_features = [col for col in feature_cols if col in df.columns]
         if not existing_features:
-              return {"status": "error", "message": "Erro ao encontrar clusters: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."}
+              return "Erro ao encontrar clusters: Não foram encontradas colunas V*, 'time' ou 'amount' no DataFrame."
 
         df_features = df[existing_features]
         scaler = StandardScaler()
@@ -176,15 +193,15 @@ def find_clusters_kmeans(n_clusters: str, *args):
             'time': ['min', 'max']
         }).to_markdown(tablefmt="pipe")
         
-        message = f"O agrupamento K-Means com {n_clusters} clusters foi concluído."
-        message += "\nCaracterísticas dos Clusters:\n" + cluster_summary
+        message = f"O agrupamento K-Means com {n_clusters} clusters foi concluído. Analise as características dos clusters (tabela abaixo) para entender os grupos de transações.\n\n"
+        message += "Características dos Clusters:\n" + cluster_summary
         
-        return {"status": "success", "message": message}
+        return message
     except Exception as e:
-        return {"status": "error", "message": f"Erro ao realizar o agrupamento com K-Means: {e}"}
+        return f"Erro ao realizar o agrupamento com K-Means: {e}"
 
 
-def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: str = 'scatter', *args):
+def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: str = 'scatter', *args) -> str:
     """
     Cria uma figura Matplotlib (fig) de dispersão ou histograma e a salva na sessão do Streamlit 
     para ser exibida no corpo principal. Use esta ferramenta APENAS se os gráficos Plotly (interativos) não forem suficientes.
@@ -196,10 +213,8 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
     col_x = column_x.lower()
     
     if col_x not in df.columns:
-        return {"status": "error", "message": f"Erro: A coluna '{col_x}' não foi encontrada para o gráfico Matplotlib."}
+        return f"Erro: A coluna '{col_x}' não foi encontrada para o gráfico Matplotlib."
 
-    # SETANDO OS COMANDOS EXATAMENTE COMO SOLICITADO PELO COLEGA
-    # 1. Declarar a variável 'fig' com o plt.figure()
     fig = plt.figure(figsize=(10, 6))
     
     try:
@@ -210,22 +225,23 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
         elif chart_type == 'scatter' and column_y:
             col_y = column_y.lower()
             if col_y not in df.columns:
-                 return {"status": "error", "message": f"Erro: A coluna Y '{col_y}' não foi encontrada para o gráfico de dispersão Matplotlib."}
+                 return f"Erro: A coluna Y '{col_y}' não foi encontrada para o gráfico de dispersão Matplotlib."
             sns.scatterplot(x=df[col_x], y=df[col_y], ax=plt.gca())
             plt.title(f'Dispersão Matplotlib: {col_x} vs {col_y}')
             plt.xlabel(col_x)
             plt.ylabel(col_y)
         else:
-             return {"status": "error", "message": "Tipo de gráfico Matplotlib inválido ('scatter' exige 2 colunas, 'hist' exige 1), ou colunas não fornecidas."}
+             return "Tipo de gráfico Matplotlib inválido ('scatter' exige 2 colunas, 'hist' exige 1), ou colunas não fornecidas."
         
         # 2. Setar a figura na sessão do Streamlit
         st.session_state.grafico_para_exibir = fig 
         
-        return {"status": "success", "message": f"O gráfico Matplotlib do tipo '{chart_type}' para as colunas foi gerado e está pronto para exibição no Streamlit."}
+        # Retorna APENAS a string de sucesso para o LLM
+        return f"O gráfico Matplotlib do tipo '{chart_type}' para as colunas foi gerado e está pronto para exibição no Streamlit (veja acima)."
 
     except Exception as e:
         plt.close(fig) # Fechar a figura em caso de erro
-        return {"status": "error", "message": f"Erro ao gerar o gráfico Matplotlib: {e}"}
+        return f"Erro ao gerar o gráfico Matplotlib: {e}"
 
 
 # --------------------------------------------------------------------------------------
@@ -259,11 +275,10 @@ def load_and_extract_data(uploaded_file):
 
 
 def initialize_agent(tools_list, system_prompt_text):
-    """Inicializa e configura o LangChain Agent com o modelo Gemini Pro."""
+    """Inicializa e configura o LangChain Agent com o modelo Gemini Flash."""
     
-    # Modelo alterado para Gemini 2.5 Flash, que é mais rápido e tem cota gratuita maior que o Pro.
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", # MUDANÇA: Usando Flash para evitar o erro 429 de cota (mais rápido e maior limite)
+        model="gemini-2.5-flash",
         google_api_key=google_api_key,
         temperature=0.0
     )
@@ -308,9 +323,13 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "agent_executor" not in st.session_state:
     st.session_state.agent_executor = None
-# Inicializa a variável de estado para o Matplotlib (para evitar o erro "KeyError")
+# Inicializa a variável de estado para o Matplotlib
 if "grafico_para_exibir" not in st.session_state:
      st.session_state.grafico_para_exibir = None
+# NOVO: Inicializa a variável de estado para o Plotly
+if "plotly_figure_para_exibir" not in st.session_state:
+     st.session_state.plotly_figure_para_exibir = None
+
 
 # Sidebar para upload de arquivo
 with st.sidebar:
@@ -332,16 +351,17 @@ with st.sidebar:
                 Tool(name=generate_scatter_plot.__name__, description=generate_scatter_plot.__doc__, func=generate_scatter_plot),
                 Tool(name=detect_outliers_isolation_forest.__name__, description=detect_outliers_isolation_forest.__doc__, func=detect_outliers_isolation_forest),
                 Tool(name=find_clusters_kmeans.__name__, description=find_clusters_kmeans.__doc__, func=find_clusters_kmeans),
-                Tool(name=generate_matplotlib_figure.__name__, description=generate_matplotlib_figure.__doc__, func=generate_matplotlib_figure), # Nova ferramenta Matplotlib
+                Tool(name=generate_matplotlib_figure.__name__, description=generate_matplotlib_figure.__doc__, func=generate_matplotlib_figure),
             ]
 
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente. "
                 "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis. "
-                "Use as ferramentas Plotly (histogram, heatmap, scatter) para gráficos interativos. Use a ferramenta 'generate_matplotlib_figure' apenas se o usuário pedir um gráfico Matplotlib específico. "
+                "Use as ferramentas Plotly (histogram, heatmap, scatter) para gráficos interativos, pois elas são as mais adequadas para o Streamlit. "
+                "Use a ferramenta 'generate_matplotlib_figure' apenas se o usuário pedir um gráfico Matplotlib específico. "
                 "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), você **DEVE** selecionar a ferramenta apropriada e executá-la. "
-                "Quando uma ferramenta retorna 'plotly_figure', o gráfico será exibido. Quando a ferramenta 'generate_matplotlib_figure' é usada, o gráfico Matplotlib é salvo na sessão. "
-                "Sua resposta final deve sempre ser em Português e oferecer insights."
+                "As ferramentas de gráfico salvam o objeto na sessão do Streamlit, e o gráfico será exibido automaticamente acima da sua resposta de texto. "
+                "Sua resposta final deve sempre ser em Português, clara, e deve oferecer insights sobre a análise realizada."
             )
 
             st.session_state.agent_executor = initialize_agent(tools_with_df, system_prompt)
@@ -356,18 +376,24 @@ with st.sidebar:
         st.dataframe(st.session_state.df.head())
 
 
-# --- EXIBIÇÃO DE MENSAGENS E GRÁFICOS ---
+# --------------------------------------------------------------------------------------
+# --- EXIBIÇÃO DE GRÁFICOS E MENSAGENS ---
+# --------------------------------------------------------------------------------------
 
-# Lógica do colega: Checar e exibir o gráfico Matplotlib da sessão
+# 1. Checa e exibe o gráfico Plotly (Prioritário)
+if st.session_state.plotly_figure_para_exibir is not None:
+    st.subheader("Gráfico Interativo Plotly")
+    st.plotly_chart(st.session_state.plotly_figure_para_exibir, use_container_width=True)
+    st.session_state.plotly_figure_para_exibir = None # Limpa a sessão após exibir
+
+# 2. Checa e exibe o gráfico Matplotlib (Secundário)
 if st.session_state.grafico_para_exibir is not None:
     st.subheader("Gráfico Matplotlib")
-    # Usa st.pyplot para renderizar o objeto Matplotlib salvo na sessão
     st.pyplot(st.session_state.grafico_para_exibir)
-    # Limpa a sessão após exibir para que o gráfico não persista em outros runs
-    st.session_state.grafico_para_exibir = None 
+    st.session_state.grafico_para_exibir = None
     plt.close('all') # Libera a memória do Matplotlib
 
-# Exibir histórico de mensagens 
+# 3. Exibir histórico de mensagens 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         if isinstance(message["content"], pd.DataFrame):
@@ -375,7 +401,7 @@ for message in st.session_state.messages:
         elif isinstance(message["content"], str):
              st.markdown(message["content"])
 
-# Tratamento de entrada do usuário
+# 4. Tratamento de entrada do usuário
 if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'Gere um mapa de calor da correlação')"):
     
     with st.chat_message("user"):
@@ -387,36 +413,35 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
             st_callback = st.container()
             
             try:
-                full_response = st.session_state.agent_executor.invoke({"input": prompt_input})
-                response_content = full_response["output"]
+                # O LangChain agora retornará uma string de texto final do LLM
+                with st.spinner("Analisando e processando..."):
+                    full_response = st.session_state.agent_executor.invoke({"input": prompt_input})
+                
+                final_text = full_response["output"]
 
-                if isinstance(response_content, dict) and response_content.get("status") in ["success", "error"]:
-                    
-                    # RENDERIZAÇÃO DE GRÁFICO PLOTLY
-                    if "plotly_figure" in response_content:
-                        st_callback.write(response_content["plotly_figure"])
-                    
-                    # Exibir e salvar a MENSAGEM de texto
-                    if "message" in response_content:
-                        st_callback.markdown(response_content["message"])
-                        st.session_state.messages.append({"role": "assistant", "content": response_content["message"]})
-                    
-                    # Exibir e salvar DADOS (Tabelas Markdown)
-                    if "data" in response_content:
-                        df_display = pd.read_markdown(response_content["data"])
+                # Lógica para tratar tabelas Markdown na resposta de texto final
+                if '|---' in final_text or '|:' in final_text:
+                    # O LangChain devolveu uma tabela Markdown, vamos tentar renderizá-la como DataFrame
+                    try:
+                        # Extrai a tabela Markdown para um DataFrame para renderização limpa
+                        df_display = pd.read_markdown(final_text)
+                        
+                        # Exibe a tabela formatada (DataFrame)
                         st_callback.dataframe(df_display)
+                        
+                        # Salva a tabela formatada no histórico de mensagens
                         st.session_state.messages.append({"role": "assistant", "content": df_display}) 
-                    
-                    if response_content.get("status") == "error":
-                          st_callback.error(response_content["message"])
-                    
+                        
+                    except Exception:
+                        # Se a conversão para DataFrame falhar, exibe como Markdown (texto)
+                        st_callback.markdown(final_text)
+                        st.session_state.messages.append({"role": "assistant", "content": final_text})
                 else:
-                    # Resposta de texto direto do LLM (quando não usa ferramenta)
-                    st_callback.markdown(str(response_content))
-                    st.session_state.messages.append({"role": "assistant", "content": str(response_content)})
+                    # Resposta de texto puro do LLM
+                    st_callback.markdown(final_text)
+                    st.session_state.messages.append({"role": "assistant", "content": final_text})
 
             except Exception as e:
-                # O erro 429 (Quota Exceeded) não é mais comum com o Gemini Flash, mas mantemos o tratamento.
                 error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Por favor, recarregue a página ou simplifique sua última pergunta."
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
