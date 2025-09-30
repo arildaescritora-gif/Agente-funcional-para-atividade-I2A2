@@ -198,7 +198,6 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
     if col_x not in df.columns:
         return {"status": "error", "message": f"Erro: A coluna '{col_x}' não foi encontrada para o gráfico Matplotlib."}
 
-    # SETANDO OS COMANDOS EXATAMENTE COMO SOLICITADO PELO COLEGA
     # 1. Declarar a variável 'fig' com o plt.figure()
     fig = plt.figure(figsize=(10, 6))
     
@@ -338,10 +337,10 @@ with st.sidebar:
             system_prompt = (
                 "Você é um agente de Análise Exploratória de Dados (EDA) altamente proficiente. "
                 "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis. "
-                "Use as ferramentas Plotly (histogram, heatmap, scatter) para gráficos interativos. Use a ferramenta 'generate_matplotlib_figure' apenas se o usuário pedir um gráfico Matplotlib específico. "
-                "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), você **DEVE** selecionar a ferramenta apropriada e executá-la. "
-                "Quando uma ferramenta retorna 'plotly_figure', o gráfico será exibido. Quando a ferramenta 'generate_matplotlib_figure' é usada, o gráfico Matplotlib é salvo na sessão. "
-                "Sua resposta final deve sempre ser em Português e oferecer insights."
+                "Use sempre as ferramentas Plotly (histogram, heatmap, scatter) para sempre gerar gráficos interativos. Use a ferramenta 'generate_matplotlib_figure' sempre que o usuário pedir um gráfico Matplotlib específico, e sempre que a pergunta demonstrar a necessidade de um gráfico. "
+                "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), você **DEVE** selecionar a ferramenta apropriada imediatamente e executá-la. "
+                "Quando uma ferramenta retorna 'plotly_figure', o gráfico será exibido imediatamente na conversa. Quando a ferramenta 'generate_matplotlib_figure' é usada, o gráfico Matplotlib é salvo na sessão. "
+                "Sua resposta final deve sempre exibir gráficos e ser em Português e oferecer insights."
             )
 
             st.session_state.agent_executor = initialize_agent(tools_with_df, system_prompt)
@@ -358,7 +357,7 @@ with st.sidebar:
 
 # --- EXIBIÇÃO DE MENSAGENS E GRÁFICOS ---
 
-# Lógica do colega: Checar e exibir o gráfico Matplotlib da sessão
+# Checar e exibir o gráfico Matplotlib da sessão
 if st.session_state.grafico_para_exibir is not None:
     st.subheader("Gráfico Matplotlib")
     # Usa st.pyplot para renderizar o objeto Matplotlib salvo na sessão
