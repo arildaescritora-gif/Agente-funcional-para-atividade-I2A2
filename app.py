@@ -36,17 +36,35 @@ except KeyError:
 # --- FERRAMENTAS (TOOLS) PARA O AGENTE ---
 # --------------------------------------------------------------------------------------
 
-# AJUSTE: Removido *args
-def show_descriptive_stats() -> str:
+# CORRIGIDO: Adicionado **kwargs para ignorar argumentos indesejados do LangChain
+def show_descriptive_stats(**kwargs) -> str:
     """
-    Gera estatísticas descritivas para todas as colunas de um DataFrame.
+    Gera estatísticas descritivas para todas as colunas de um DataFrame, incluindo contagem de não-nulos e tipos de dados.
     Retorna uma string contendo a tabela em formato Markdown.
     """
     df = st.session_state.df
+    
+    # Adicionando informações de contagem de não-nulos e dtypes para uma EDA mais completa
+    info_df = pd.DataFrame({
+        'Dtype': df.dtypes,
+        'Não Nulos': df.count(),
+        'Nulos': df.isnull().sum(),
+        '% Nulos': (df.isnull().sum() / len(df)) * 100
+    }).reset_index().rename(columns={'index': 'Coluna'})
+
+    # Usando tabulate para melhor formatação da info
+    info_table = tabulate(info_df, headers='keys', tablefmt='pipe', showindex=False)
+    
+    # Estatísticas descritivas padrão para numéricos
     stats = df.describe(include='all').to_markdown(tablefmt="pipe")
     
-    # Retorna uma única string para o LLM, que ele irá formatar
-    return "Estatísticas descritivas geradas. Analise a distribuição dos dados e procure por valores extremos:\n\n" + stats
+    # Combina as informações
+    message = "Informações sobre tipos e nulidade das colunas:\n\n"
+    message += info_table
+    message += "\n\nEstatísticas descritivas das colunas:\n\n"
+    message += stats
+
+    return message
 
 
 def generate_histogram(column: str, *args) -> str:
@@ -62,18 +80,15 @@ def generate_histogram(column: str, *args) -> str:
     if not pd.api.types.is_numeric_dtype(df[column]):
         return f"Erro: A coluna '{column}' não é numérica. Forneça uma coluna numérica para gerar um histograma."
     
-    # Usando Plotly Express
     fig = px.histogram(df, x=column, title=f'Distribuição de {column}')
     
-    # Salva o objeto Plotly na sessão do Streamlit para renderização
     st.session_state.plotly_figure_para_exibir = fig
     
-    # Retorna APENAS a string de sucesso para o LLM
     return f"O histograma da coluna '{column}' foi gerado com sucesso. O gráfico interativo está abaixo. Analise a distribuição dos dados e procure por assimetrias ou picos."
 
 
-# AJUSTE: Removido *args
-def generate_correlation_heatmap() -> str:
+# CORRIGIDO: Adicionado **kwargs para ignorar argumentos indesejados do LangChain
+def generate_correlation_heatmap(**kwargs) -> str:
     """
     Calcula a matriz de correlação entre as variáveis numéricas do DataFrame
     e gera um mapa de calor (heatmap) interativo Plotly.
@@ -85,7 +100,6 @@ def generate_correlation_heatmap() -> str:
     
     correlation_matrix = df[numeric_cols].corr()
     
-    # Usando Plotly Express
     fig = px.imshow(
         correlation_matrix,
         text_auto=".2f",
@@ -95,10 +109,8 @@ def generate_correlation_heatmap() -> str:
     )
     fig.update_xaxes(side="top")
     
-    # Salva o objeto Plotly na sessão do Streamlit para renderização
     st.session_state.plotly_figure_para_exibir = fig
     
-    # Retorna APENAS a string de sucesso para o LLM
     return "O mapa de calor da correlação interativo foi gerado. O gráfico está abaixo. Analise o padrão de cores para identificar relações fortes (vermelho/azul escuro) ou fracas (cinza claro)."
 
 
@@ -123,18 +135,15 @@ def generate_scatter_plot(columns_str: str, *args) -> str:
     if x_col not in df.columns or y_col not in df.columns:
         return f"Erro: Uma ou ambas as colunas ('{x_col}', '{y_col}') não existem no DataFrame."
     
-    # Usando Plotly Express
     fig = px.scatter(df, x=x_col, y=y_col, title=f'Gráfico de Dispersão: {x_col} vs {y_col}')
     
-    # Salva o objeto Plotly na sessão do Streamlit para renderização
     st.session_state.plotly_figure_para_exibir = fig
     
-    # Retorna APENAS a string de sucesso para o LLM
     return f"O gráfico de dispersão interativo para '{x_col}' vs '{y_col}' foi gerado. O gráfico está abaixo. Use-o para visualizar a forma e a densidade da relação entre essas variáveis."
 
 
-# AJUSTE: Removido *args
-def detect_outliers_isolation_forest() -> str:
+# CORRIGIDO: Adicionado **kwargs para ignorar argumentos indesejados do LangChain
+def detect_outliers_isolation_forest(**kwargs) -> str:
     """
     Detecta anomalias (outliers) no DataFrame usando o algoritmo Isolation Forest.
     A análise é aplicada às colunas V1 a V28, 'time' e 'amount'.
@@ -236,10 +245,8 @@ def generate_matplotlib_figure(column_x: str, column_y: str = None, chart_type: 
         else:
              return "Tipo de gráfico Matplotlib inválido ('scatter' exige 2 colunas, 'hist' exige 1), ou colunas não fornecidas."
         
-        # 2. Setar a figura na sessão do Streamlit
         st.session_state.grafico_para_exibir = fig 
         
-        # Retorna APENAS a string de sucesso para o LLM
         return f"O gráfico Matplotlib do tipo '{chart_type}' para as colunas foi gerado e está pronto para exibição no Streamlit (veja acima)."
 
     except Exception as e:
@@ -280,7 +287,7 @@ def load_and_extract_data(uploaded_file):
 def initialize_agent(tools_list, system_prompt_text):
     """Inicializa e configura o LangChain Agent com o modelo Gemini Flash."""
     
-    llm = ChatGoogleGenerativeAI(
+    llm = ChatGoogleGenAI(
         model="gemini-2.5-flash",
         google_api_key=google_api_key,
         temperature=0.0
@@ -326,10 +333,8 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "agent_executor" not in st.session_state:
     st.session_state.agent_executor = None
-# Inicializa a variável de estado para o Matplotlib
 if "grafico_para_exibir" not in st.session_state:
      st.session_state.grafico_para_exibir = None
-# Inicializa a variável de estado para o Plotly
 if "plotly_figure_para_exibir" not in st.session_state:
      st.session_state.plotly_figure_para_exibir = None
 
@@ -362,7 +367,7 @@ with st.sidebar:
                 "Sua **PRIMEIRA PRIORIDADE** é sempre tentar responder à pergunta do usuário usando uma das ferramentas disponíveis. "
                 "Use as ferramentas Plotly (histogram, heatmap, scatter) para gráficos interativos, pois elas são as mais adequadas para o Streamlit. "
                 "Use a ferramenta 'generate_matplotlib_figure' apenas se o usuário pedir um gráfico Matplotlib específico. "
-                "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico'), você **DEVE** selecionar a ferramenta apropriada e executá-la. "
+                "**SEMPRE** que o usuário solicitar uma análise de dados (ex: 'correlação', 'distribuição', 'relação', 'gráfico', 'estatísticas', 'médias', 'intervalo', 'outliers', 'tipos de dados'), você **DEVE** selecionar a ferramenta apropriada e executá-la. "
                 "As ferramentas de gráfico salvam o objeto na sessão do Streamlit, e o gráfico será exibido automaticamente acima da sua resposta de texto. "
                 "Sua resposta final deve sempre ser em Português, clara, e deve oferecer insights sobre a análise realizada."
             )
@@ -426,7 +431,7 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                 if '|---' in final_text or '|:' in final_text:
                     # O LangChain devolveu uma tabela Markdown, vamos tentar renderizá-la como DataFrame
                     try:
-                        # Extrai a tabela Markdown para um DataFrame para renderização limpa
+                        # Para lidar com tabelas de múltiplas linhas de cabeçalho (como a do describe()),  usamos um pequeno hack se a conversão falhar
                         df_display = pd.read_markdown(final_text)
                         
                         # Exibe a tabela formatada (DataFrame)
@@ -445,6 +450,13 @@ if prompt_input := st.chat_input("Qual análise você gostaria de fazer? (Ex: 'G
                     st.session_state.messages.append({"role": "assistant", "content": final_text})
 
             except Exception as e:
-                error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Por favor, recarregue a página ou simplifique sua última pergunta."
+                # Melhorando a mensagem de erro para ser mais informativa
+                if "takes 0 positional arguments but 1 was given" in str(e):
+                     error_message = "Desculpe, o agente tentou usar uma ferramenta sem argumentos, mas o modelo enviou um argumento extra. Isso é um erro interno do LangChain. Por favor, tente reformular sua pergunta de forma mais direta, ex: 'Gere o mapa de calor da correlação'."
+                elif "500 An internal error has occurred" in str(e):
+                     error_message = "Desculpe, ocorreu um erro temporário (Erro 500) na API do Gemini. Por favor, tente recarregar a página e refazer sua pergunta."
+                else:
+                     error_message = f"Desculpe, ocorreu um erro inesperado na análise: {e}. Por favor, recarregue a página ou simplifique sua última pergunta."
+                     
                 st_callback.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
