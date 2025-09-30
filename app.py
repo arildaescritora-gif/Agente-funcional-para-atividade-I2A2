@@ -212,8 +212,14 @@ with st.sidebar:
             load_result = load_and_extract_data(uploaded_file)
         if load_result["status"] == "success":
             st.session_state.df = load_result["df"]
+
             tools_with_df = [
-                Tool(name=f.__name__, description=f.__doc__, func=f) for f in [
+                Tool.from_function(
+                    func=f,
+                    name=f.__name__,
+                    description=f.__doc__ or "Sem descrição"
+                )
+                for f in [
                     show_descriptive_stats,
                     generate_histogram,
                     generate_correlation_heatmap,
@@ -223,6 +229,7 @@ with st.sidebar:
                     generate_matplotlib_figure
                 ]
             ]
+
             system_prompt = (
                 "Você é um agente de EDA. Sempre use as ferramentas disponíveis. "
                 "Use Plotly para gráficos interativos e Matplotlib apenas se solicitado."
